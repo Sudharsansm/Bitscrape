@@ -1,0 +1,7 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include bitscrape/py.typed
+recursive-include bitscrape *.py *.pyi
+recursive-exclude tests *
+recursive-exclude examples *

@@ -1,0 +1,130 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ── Project metadata ────────────────────────────────────────────────────────
+[project]
+name = "bitscrape"
+version = "0.1.0"
+description = "A modern, production-grade async web scraping framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Bitscrape Contributors" }]
+keywords = ["scraping", "crawler", "async", "pydantic", "playwright", "spider"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+
+# ── Core dependencies (installed with: pip install bitscrape) ───────────────
+dependencies = [
+    "aiohttp>=3.9",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "selectolax>=0.3",
+    "lxml>=5.0",
+    "click>=8.1",
+    "rich>=13.0",
+    "orjson>=3.9",
+    "tenacity>=8.2",
+    "httpx>=0.27",
+]
+
+# ── Optional extras ─────────────────────────────────────────────────────────
+[project.optional-dependencies]
+
+# JS rendering:  pip install bitscrape[playwright]
+playwright = ["playwright>=1.43"]
+
+# Distributed:   pip install bitscrape[redis]
+redis = ["redis>=5.0"]
+
+# PostgreSQL:    pip install bitscrape[postgres]
+postgres = ["asyncpg>=0.29"]
+
+# LangGraph workflow: pip install bitscrape[workflow]
+workflow = ["langgraph>=0.1", "langchain-core>=0.2"]
+
+# Faster event loop (Linux/Mac):  pip install bitscrape[speed]
+speed = ["uvloop>=0.19; sys_platform != 'win32'"]
+
+# Everything:    pip install bitscrape[full]
+full = [
+    "playwright>=1.43",
+    "redis>=5.0",
+    "asyncpg>=0.29",
+    "langgraph>=0.1",
+    "langchain-core>=0.2",
+    "uvloop>=0.19; sys_platform != 'win32'",
+]
+
+# Development:   pip install bitscrape[dev]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "mypy>=1.9",
+    "ruff>=0.4",
+    "aioresponses>=0.7",
+    "build>=1.0",
+    "twine>=5.0",
+]
+
+# ── CLI entry point ─────────────────────────────────────────────────────────
+[project.scripts]
+bitscrape = "bitscrape.cli.main:cli"
+
+# ── Project URLs ────────────────────────────────────────────────────────────
+[project.urls]
+Homepage      = "https://github.com/yourorg/bitscrape"
+Documentation = "https://github.com/yourorg/bitscrape#readme"
+Repository    = "https://github.com/yourorg/bitscrape"
+"Bug Tracker" = "https://github.com/yourorg/bitscrape/issues"
+Changelog     = "https://github.com/yourorg/bitscrape/CHANGELOG.md"
+
+# ── Package discovery ───────────────────────────────────────────────────────
+[tool.setuptools.packages.find]
+where   = ["."]
+include = ["bitscrape*"]
+
+[tool.setuptools.package-data]
+bitscrape = ["py.typed"]          # PEP 561 — marks package as typed
+
+# ── Pytest ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths    = ["tests"]
+addopts      = "-v --tb=short"
+
+# ── Mypy ────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version      = "3.11"
+strict              = true
+ignore_missing_imports = true
+
+# ── Ruff (linter + formatter) ───────────────────────────────────────────────
+[tool.ruff]
+line-length    = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+# ── Coverage ────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source   = ["bitscrape"]
+omit     = ["tests/*", "examples/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under   = 80
