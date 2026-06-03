@@ -1,7 +1,7 @@
 |logo|
 
-.. |logo| image:: https://raw.githubusercontent.com/YOUR_USERNAME/bitscrape/main/docs/_static/logo.svg
-   :target: https://github.com/YOUR_USERNAME/bitscrape
+.. |logo| image:: docs/_static/logo.png
+   :target: https://github.com/Sudharsansm/bitscrape
    :alt: Bitscrape
    :width: 480px
 
@@ -15,24 +15,24 @@
    :target: https://pypi.org/project/bitscrape/
    :alt: Supported Python Versions
 
-.. |ubuntu| image:: https://github.com/YOUR_USERNAME/bitscrape/workflows/Ubuntu/badge.svg
-   :target: https://github.com/YOUR_USERNAME/bitscrape/actions?query=workflow%3AUbuntu
+.. |ubuntu| image:: https://github.com/Sudharsansm/bitscrape/workflows/Ubuntu/badge.svg
+   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AUbuntu
    :alt: Ubuntu
 
-.. |macos| image:: https://github.com/YOUR_USERNAME/bitscrape/workflows/macOS/badge.svg
-   :target: https://github.com/YOUR_USERNAME/bitscrape/actions?query=workflow%3AmacOS
+.. |macos| image:: https://github.com/Sudharsansm/bitscrape/workflows/macOS/badge.svg
+   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AmacOS
    :alt: macOS
 
-.. |windows| image:: https://github.com/YOUR_USERNAME/bitscrape/workflows/Windows/badge.svg
-   :target: https://github.com/YOUR_USERNAME/bitscrape/actions?query=workflow%3AWindows
+.. |windows| image:: https://github.com/Sudharsansm/bitscrape/workflows/Windows/badge.svg
+   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AWindowsc:\Users\sudha\Downloads\bitscrape.png
    :alt: Windows
 
-.. |coverage| image:: https://img.shields.io/codecov/c/github/YOUR_USERNAME/bitscrape/main.svg
-   :target: https://codecov.io/github/YOUR_USERNAME/bitscrape?branch=main
+.. |coverage| image:: https://img.shields.io/codecov/c/github/Sudharsansm/bitscrape/main.svg
+   :target: https://codecov.io/github/Sudharsansm/bitscrape?branch=main
    :alt: Coverage report
 
 .. |license| image:: https://img.shields.io/pypi/l/bitscrape.svg
-   :target: https://github.com/YOUR_USERNAME/bitscrape/blob/main/LICENSE
+   :target: https://github.com/Sudharsansm/bitscrape/blob/main/LICENSE
    :alt: License
 
 .. |downloads| image:: https://img.shields.io/pypi/dm/bitscrape.svg
@@ -46,10 +46,10 @@ It is cross-platform, requires Python 3.11+, and is built on ``asyncio``,
 `Pydantic`_ v2, and `Playwright`_ for JavaScript rendering. It is maintained
 by `its contributors`_.
 
-.. _Bitscrape: https://github.com/YOUR_USERNAME/bitscrape
+.. _Bitscrape: https://github.com/Sudharsansm/bitscrape
 .. _Pydantic: https://docs.pydantic.dev/
 .. _Playwright: https://playwright.dev/python/
-.. _its contributors: https://github.com/YOUR_USERNAME/bitscrape/graphs/contributors
+.. _its contributors: https://github.com/Sudharsansm/bitscrape/graphs/contributors
 
 Overview
 ========
@@ -217,13 +217,13 @@ Contributing
 Contributions are welcome! Please read `CONTRIBUTING.md`_ before submitting a
 pull request.
 
-.. _CONTRIBUTING.md: https://github.com/YOUR_USERNAME/bitscrape/blob/main/CONTRIBUTING.md
+.. _CONTRIBUTING.md: https://github.com/Sudharsansm/bitscrape/blob/main/CONTRIBUTING.md
 
 To set up a development environment:
 
 .. code:: bash
 
-    git clone https://github.com/YOUR_USERNAME/bitscrape.git
+    git clone https://github.com/Sudharsansm/bitscrape.git
     cd bitscrape
     pip install -e ".[dev]"
     pytest tests/
@@ -233,4 +233,4 @@ License
 
 Bitscrape is distributed under the `MIT License`_.
 
-.. _MIT License: https://github.com/YOUR_USERNAME/bitscrape/blob/main/LICENSE
+.. _MIT License: https://github.com/Sudharsansm/bitscrape/blob/main/LICENSE
