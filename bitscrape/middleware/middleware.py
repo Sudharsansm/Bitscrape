@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import random
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any
 from urllib.parse import urlparse
 

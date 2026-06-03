@@ -21,7 +21,7 @@ from bitscrape.core.models import CrawlStats, Request, Response
 from bitscrape.core.settings import Settings
 from bitscrape.core.spider import Spider
 from bitscrape.downloader.downloader import DownloadError, Downloader
-from bitscrape.exporters.feed import BaseExporter, get_exporter
+from bitscrape.exporters.feed import BaseExporter
 from bitscrape.middleware.middleware import MiddlewareManager
 from bitscrape.parser.selector import ParsedResponse
 from bitscrape.pipeline.pipelines import PipelineManager

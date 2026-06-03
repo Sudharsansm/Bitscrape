@@ -13,15 +13,8 @@ import asyncio
 import logging
 import time
 from collections import defaultdict
-from typing import Any
 
 import aiohttp
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
 
 from bitscrape.core.models import Request, Response
 from bitscrape.core.settings import Settings
