@@ -5,6 +5,7 @@ Write scraped items to files or stdout.
 
 Supported formats: jsonl, json, csv, xml
 """
+
 from __future__ import annotations
 
 import csv
@@ -32,6 +33,7 @@ def _item_to_dict(item: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Base
 # ---------------------------------------------------------------------------
+
 
 class BaseExporter(ABC):
     def __init__(self, uri: str | None = None) -> None:
@@ -61,6 +63,7 @@ class BaseExporter(ABC):
 # JSONL (one JSON object per line)  ← fastest / recommended for large datasets
 # ---------------------------------------------------------------------------
 
+
 class JSONLExporter(BaseExporter):
     def export_item(self, item: Any) -> None:
         assert self._file is not None
@@ -72,6 +75,7 @@ class JSONLExporter(BaseExporter):
 # ---------------------------------------------------------------------------
 # JSON array
 # ---------------------------------------------------------------------------
+
 
 class JSONExporter(BaseExporter):
     def __init__(self, uri: str | None = None) -> None:
@@ -92,6 +96,7 @@ class JSONExporter(BaseExporter):
 # CSV
 # ---------------------------------------------------------------------------
 
+
 class CSVExporter(BaseExporter):
     def __init__(self, uri: str | None = None) -> None:
         super().__init__(uri)
@@ -110,6 +115,7 @@ class CSVExporter(BaseExporter):
 # ---------------------------------------------------------------------------
 # XML
 # ---------------------------------------------------------------------------
+
 
 class XMLExporter(BaseExporter):
     def open(self) -> None:
@@ -147,5 +153,7 @@ _EXPORTERS: dict[str, type[BaseExporter]] = {
 def get_exporter(fmt: str, uri: str | None = None) -> BaseExporter:
     cls = _EXPORTERS.get(fmt.lower())
     if cls is None:
-        raise ValueError(f"Unknown feed format {fmt!r}. Choose from: {list(_EXPORTERS)}")
+        raise ValueError(
+            f"Unknown feed format {fmt!r}. Choose from: {list(_EXPORTERS)}"
+        )
     return cls(uri)

@@ -6,6 +6,7 @@ Async HTTP downloader built on aiohttp.
 - Retry on transient errors via tenacity
 - Optional Playwright passthrough for JS-rendered pages
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -60,7 +61,9 @@ class Downloader:
             timeout=timeout,
             headers={"User-Agent": self.settings.user_agent},
         )
-        logger.info("Downloader opened (max_concurrent=%d)", self.settings.concurrent_requests)
+        logger.info(
+            "Downloader opened (max_concurrent=%d)", self.settings.concurrent_requests
+        )
 
     async def close(self) -> None:
         if self._session:
@@ -127,17 +130,23 @@ class Downloader:
                             resp.history,
                             status=resp.status,
                         )
-                    logger.debug("GET %s → %d (%.0fms)", request.url, resp.status, elapsed)
+                    logger.debug(
+                        "GET %s → %d (%.0fms)", request.url, resp.status, elapsed
+                    )
                     return response
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
                 attempt += 1
                 last_exc = exc
                 if attempt <= request.max_retries:
-                    wait = min(2 ** attempt, 30)
+                    wait = min(2**attempt, 30)
                     logger.warning(
                         "Retry %d/%d for %s (%s) — waiting %ds",
-                        attempt, request.max_retries, request.url, exc, wait,
+                        attempt,
+                        request.max_retries,
+                        request.url,
+                        exc,
+                        wait,
                     )
                     await asyncio.sleep(wait)
 
@@ -160,7 +169,9 @@ class Downloader:
         t0 = time.monotonic()
         async with async_playwright() as pw:
             browser_type = getattr(pw, self.settings.playwright_browser)
-            browser = await browser_type.launch(headless=self.settings.playwright_headless)
+            browser = await browser_type.launch(
+                headless=self.settings.playwright_headless
+            )
             context = await browser.new_context(
                 extra_http_headers=request.headers or {},
                 user_agent=self.settings.user_agent,
@@ -198,4 +209,5 @@ class Downloader:
 
 def _domain(url: str) -> str:
     from urllib.parse import urlparse
+
     return urlparse(url).netloc

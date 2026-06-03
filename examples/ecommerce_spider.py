@@ -2,6 +2,7 @@
 Example: books.toscrape.com — full pipeline demo.
 Run: python examples/ecommerce_spider.py
 """
+
 import bitscrape
 
 
@@ -32,6 +33,7 @@ class BooksSpider(bitscrape.Spider):
         nxt = response.css("li.next a::attr(href)").get()
         if nxt:
             from urllib.parse import urljoin
+
             yield self.follow(urljoin(response.url, nxt))
 
 

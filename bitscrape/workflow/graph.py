@@ -8,6 +8,7 @@ Defines a directed crawl graph:
 LangGraph manages state, persistence, and conditional transitions.
 No LLMs are used — this is pure orchestration.
 """
+
 from __future__ import annotations
 
 import logging
@@ -20,8 +21,10 @@ logger = logging.getLogger(__name__)
 # State schema
 # ---------------------------------------------------------------------------
 
+
 class CrawlState(TypedDict, total=False):
     """Shared state passed between graph nodes."""
+
     request_url: str
     response_body: bytes
     response_status: int
@@ -35,6 +38,7 @@ class CrawlState(TypedDict, total=False):
 # Graph builder
 # ---------------------------------------------------------------------------
 
+
 def build_crawl_graph(engine: Any) -> Any:
     """
     Build and compile a LangGraph StateGraph for a single crawl cycle.
@@ -46,8 +50,7 @@ def build_crawl_graph(engine: Any) -> Any:
         from langgraph.graph import END, START, StateGraph
     except ImportError:
         raise ImportError(
-            "langgraph is required for workflow orchestration. "
-            "pip install langgraph"
+            "langgraph is required for workflow orchestration. " "pip install langgraph"
         )
 
     builder: StateGraph = StateGraph(CrawlState)  # type: ignore[type-arg]
@@ -60,6 +63,7 @@ def build_crawl_graph(engine: Any) -> Any:
         logger.debug("[workflow] fetch: %s", url)
         try:
             from bitscrape.core.models import Request
+
             req = Request(url=url)
             resp = await engine._downloader.fetch(req)
             return {
@@ -81,6 +85,7 @@ def build_crawl_graph(engine: Any) -> Any:
         logger.debug("[workflow] parse: %s", state["request_url"])
         from bitscrape.core.models import Request, Response
         from bitscrape.parser.selector import ParsedResponse
+
         req = Request(url=state["request_url"])
         resp = Response(
             url=state["request_url"],
@@ -124,6 +129,8 @@ def build_crawl_graph(engine: Any) -> Any:
     builder.add_edge(START, "fetch")
     builder.add_edge("fetch", "parse")
     builder.add_edge("parse", "pipeline")
-    builder.add_conditional_edges("pipeline", should_continue, {"fetch": "fetch", END: END})
+    builder.add_conditional_edges(
+        "pipeline", should_continue, {"fetch": "fetch", END: END}
+    )
 
     return builder.compile()

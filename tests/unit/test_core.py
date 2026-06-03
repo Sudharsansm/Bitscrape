@@ -2,6 +2,7 @@
 Unit tests for Bitscrape core components.
 Run with: pytest tests/ -v
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,10 +21,10 @@ from bitscrape.pipeline.pipelines import (
 from bitscrape.scheduler.dupefilter import MemoryDupeFilter, fingerprint
 from bitscrape.scheduler.scheduler import MemoryQueue, Scheduler
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def settings():
@@ -50,6 +51,7 @@ def dummy_spider(settings):
 # Models
 # ---------------------------------------------------------------------------
 
+
 def test_request_defaults():
     r = Request(url="https://example.com")
     assert r.method == "GET"
@@ -72,6 +74,7 @@ def test_response_text():
 
 def test_crawl_stats_rps():
     import time
+
     s = CrawlStats(requests_made=100, start_time=time.time() - 10.0)
     assert s.rps == pytest.approx(10.0, abs=1.0)
 
@@ -79,6 +82,7 @@ def test_crawl_stats_rps():
 # ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
+
 
 def test_settings_defaults():
     s = Settings()
@@ -96,13 +100,14 @@ def test_settings_env_override(monkeypatch):
 # DupeFilter
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_memory_dupefilter_deduplicates():
     df = MemoryDupeFilter()
     r = Request(url="https://example.com")
     fp = fingerprint(r)
     assert await df.seen(fp) is False  # first time
-    assert await df.seen(fp) is True   # second time = duplicate
+    assert await df.seen(fp) is True  # second time = duplicate
 
 
 def test_fingerprint_stable():
@@ -120,6 +125,7 @@ def test_fingerprint_different_urls():
 # ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_scheduler_enqueue_dequeue(settings):
@@ -156,6 +162,7 @@ async def test_scheduler_depth_limit():
 # ---------------------------------------------------------------------------
 # Pipelines
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_logging_pipeline(dummy_spider):
@@ -206,6 +213,7 @@ async def test_pipeline_manager_drop(dummy_spider):
 # Parser / selectors
 # ---------------------------------------------------------------------------
 
+
 def test_parsed_response_css():
     req = Request(url="https://example.com")
     resp = Response(
@@ -215,6 +223,7 @@ def test_parsed_response_css():
         request=req,
     )
     from bitscrape.parser.selector import ParsedResponse
+
     pr = ParsedResponse(resp)
     assert pr.css("h1::text").get() == "Hello"
     assert pr.css("a::attr(href)").get() == "/page"
@@ -229,6 +238,7 @@ def test_selector_list_getall():
         request=req,
     )
     from bitscrape.parser.selector import ParsedResponse
+
     pr = ParsedResponse(resp)
     items = pr.css("li::text").getall()
     assert items == ["a", "b", "c"]
@@ -238,8 +248,10 @@ def test_selector_list_getall():
 # Exporters
 # ---------------------------------------------------------------------------
 
+
 def test_jsonl_exporter(tmp_path):
     from bitscrape.exporters.feed import JSONLExporter
+
     out = tmp_path / "out.jsonl"
     exp = JSONLExporter(str(out))
     exp.open()
@@ -249,12 +261,14 @@ def test_jsonl_exporter(tmp_path):
     lines = out.read_text().strip().split("\n")
     assert len(lines) == 2
     import json
+
     assert json.loads(lines[0])["title"] == "foo"
 
 
 def test_csv_exporter(tmp_path):
     import csv
     from bitscrape.exporters.feed import CSVExporter
+
     out = tmp_path / "out.csv"
     exp = CSVExporter(str(out))
     exp.open()

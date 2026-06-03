@@ -2,6 +2,7 @@
 Global settings loaded from env vars or .env files.
 All env vars are prefixed with BITSCRAPE_.
 """
+
 from __future__ import annotations
 
 from pydantic import Field
@@ -16,7 +17,9 @@ class Settings(BaseSettings):
 
     # --- Downloader ----------------------------------------------------------
     download_timeout: float = Field(30.0, ge=1.0)
-    retry_http_codes: list[int] = Field(default_factory=lambda: [500, 502, 503, 504, 429])
+    retry_http_codes: list[int] = Field(
+        default_factory=lambda: [500, 502, 503, 504, 429]
+    )
     user_agent: str = "BitscrapeBot/0.1 (+https://github.com/yourorg/bitscrape)"
     follow_redirects: bool = True
     max_redirect_count: int = 10
@@ -42,8 +45,8 @@ class Settings(BaseSettings):
     stats_dump_interval: float = 60.0  # seconds
 
     # --- Exports -------------------------------------------------------------
-    feed_uri: str | None = None          # e.g. "data.jsonl" or "s3://bucket/key"
-    feed_format: str = "jsonl"           # json | jsonl | csv | xml
+    feed_uri: str | None = None  # e.g. "data.jsonl" or "s3://bucket/key"
+    feed_format: str = "jsonl"  # json | jsonl | csv | xml
 
     # --- Robots.txt ----------------------------------------------------------
     robotstxt_obey: bool = True

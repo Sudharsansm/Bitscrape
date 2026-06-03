@@ -26,6 +26,7 @@ Or with destructured imports (Scrapy-style):
     from bitscrape import JSONLExporter, JSONExporter, CSVExporter, XMLExporter
     from bitscrape import UserAgentMiddleware, RobotsMiddleware, CookieMiddleware
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -84,6 +85,7 @@ Item = BaseItem
 # ``Field`` — returns a Pydantic Field (covers scrapy.Field use-case)
 from pydantic import Field
 
+
 # ``FormRequest`` — a Request pre-configured for form submission
 class FormRequest(Request):
     """
@@ -97,19 +99,25 @@ class FormRequest(Request):
             callback="parse_after_login",
         )
     """
+
     method: str = "POST"
     formdata: dict[str, str] = {}
 
     def model_post_init(self, __context: Any) -> None:
         if self.formdata and not self.body:
             from urllib.parse import urlencode
+
             encoded = urlencode(self.formdata).encode()
             object.__setattr__(self, "body", encoded)
-            headers = {**self.headers, "Content-Type": "application/x-www-form-urlencoded"}
+            headers = {
+                **self.headers,
+                "Content-Type": "application/x-www-form-urlencoded",
+            }
             object.__setattr__(self, "headers", headers)
 
 
 # ── Top-level ``run()`` helper ─────────────────────────────────────────────
+
 
 def run(
     spider_cls: Type[Spider],

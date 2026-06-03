@@ -9,6 +9,7 @@ The central coordinator.  For each crawl run it:
 4. Stats are tracked and logged.
 5. Gracefully closes everything when the queue empties or a signal is received.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -101,9 +102,7 @@ class Engine:
                     continue
 
                 # Spawn a worker task
-                task = asyncio.create_task(
-                    self._process_request(request, semaphore)
-                )
+                task = asyncio.create_task(self._process_request(request, semaphore))
                 tasks.add(task)
 
             # Wait for remaining tasks
@@ -169,7 +168,9 @@ class Engine:
 
             except Exception as exc:
                 self._stats.requests_failed += 1
-                logger.error("Unexpected error on %s: %s", request.url, exc, exc_info=True)
+                logger.error(
+                    "Unexpected error on %s: %s", request.url, exc, exc_info=True
+                )
 
     async def _parse_response(self, request: Request, response: Response) -> None:
         # Resolve callback name → spider method

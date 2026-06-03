@@ -10,6 +10,7 @@ Built-in middleware:
   - RobotsMiddleware    – blocks disallowed URLs (obeys robots.txt)
   - CookieMiddleware    – maintains cookie jar per domain
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,8 +28,11 @@ logger = logging.getLogger(__name__)
 # Base
 # ---------------------------------------------------------------------------
 
+
 class BaseMiddleware(ABC):
-    async def process_request(self, request: Request, spider: Any) -> Request | Response | None:
+    async def process_request(
+        self, request: Request, spider: Any
+    ) -> Request | Response | None:
         """
         Return None to continue, a modified Request to replace it,
         or a Response to short-circuit the download.
@@ -63,7 +67,9 @@ DEFAULT_USER_AGENTS = [
 
 
 class UserAgentMiddleware(BaseMiddleware):
-    def __init__(self, user_agents: list[str] | None = None, rotate: bool = False) -> None:
+    def __init__(
+        self, user_agents: list[str] | None = None, rotate: bool = False
+    ) -> None:
         self._agents = user_agents or DEFAULT_USER_AGENTS
         self._rotate = rotate
         self._idx = 0
@@ -81,6 +87,7 @@ class UserAgentMiddleware(BaseMiddleware):
 # Robots.txt
 # ---------------------------------------------------------------------------
 
+
 class RobotsMiddleware(BaseMiddleware):
     """
     Downloads and caches robots.txt for each domain and blocks disallowed paths.
@@ -95,9 +102,12 @@ class RobotsMiddleware(BaseMiddleware):
         try:
             from urllib.robotparser import RobotFileParser
             import aiohttp
+
             url = f"{scheme}://{domain}/robots.txt"
             async with aiohttp.ClientSession() as sess:
-                async with sess.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                async with sess.get(
+                    url, timeout=aiohttp.ClientTimeout(total=5)
+                ) as resp:
                     text = await resp.text()
             parser = RobotFileParser()
             parser.set_url(url)
@@ -118,6 +128,7 @@ class RobotsMiddleware(BaseMiddleware):
         if parser and not parser.can_fetch(ua, request.url):
             logger.info("Blocked by robots.txt: %s", request.url)
             from bitscrape.pipeline.pipelines import DropItem
+
             raise DropItem(f"robots.txt disallows: {request.url}")
         return None
 
@@ -125,6 +136,7 @@ class RobotsMiddleware(BaseMiddleware):
 # ---------------------------------------------------------------------------
 # Cookie jar
 # ---------------------------------------------------------------------------
+
 
 class CookieMiddleware(BaseMiddleware):
     """
@@ -143,7 +155,9 @@ class CookieMiddleware(BaseMiddleware):
             return request.model_copy(update={"headers": headers})  # type: ignore[return-value]
         return None
 
-    async def process_response(self, request: Request, response: Response, spider: Any) -> Response:
+    async def process_response(
+        self, request: Request, response: Response, spider: Any
+    ) -> Response:
         domain = urlparse(request.url).netloc
         set_cookie = response.headers.get("Set-Cookie", "")
         if set_cookie:
@@ -161,6 +175,7 @@ class CookieMiddleware(BaseMiddleware):
 # Middleware manager
 # ---------------------------------------------------------------------------
 
+
 class MiddlewareManager:
     """
     Applies middleware in order for requests, reverse order for responses.
@@ -169,7 +184,9 @@ class MiddlewareManager:
     def __init__(self, middlewares: list[BaseMiddleware]) -> None:
         self._middlewares = middlewares
 
-    async def process_request(self, request: Request, spider: Any) -> Request | Response | None:
+    async def process_request(
+        self, request: Request, spider: Any
+    ) -> Request | Response | None:
         for mw in self._middlewares:
             result = await mw.process_request(request, spider)
             if result is None:

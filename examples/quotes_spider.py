@@ -3,6 +3,7 @@ Example: quotes.toscrape.com
 Run: bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
   or: python examples/quotes_spider.py
 """
+
 import bitscrape
 
 

@@ -12,6 +12,7 @@ Key design:
                       supports iteration (``for item in response.css("div.quote")``)
                       as well as .get() / .getall()
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # NodeSelector  —  wraps ONE node, supports chained .css() / .xpath()
 # ---------------------------------------------------------------------------
+
 
 class NodeSelector:
     """
@@ -84,7 +86,9 @@ class NodeSelector:
 
     def __repr__(self) -> str:
         try:
-            tag = self._node.tag if self._backend == "selectolax" else self._node.root.tag
+            tag = (
+                self._node.tag if self._backend == "selectolax" else self._node.root.tag
+            )
         except Exception:
             tag = "?"
         return f"<NodeSelector tag={tag!r}>"
@@ -93,6 +97,7 @@ class NodeSelector:
 # ---------------------------------------------------------------------------
 # SelectorList  —  list of NodeSelectors (or plain strings)
 # ---------------------------------------------------------------------------
+
 
 class SelectorList:
     """
@@ -106,7 +111,7 @@ class SelectorList:
     """
 
     def __init__(self, items: list[Any], *, is_text: bool = False) -> None:
-        self._items = items       # list of NodeSelector | str
+        self._items = items  # list of NodeSelector | str
         self._is_text = is_text
 
     # ------------------------------------------------------------------
@@ -176,6 +181,7 @@ class SelectorList:
 # ParsedResponse  —  top-level entry point, wraps a full Response
 # ---------------------------------------------------------------------------
 
+
 class ParsedResponse:
     """
     Wraps a Response and exposes ``.css()`` and ``.xpath()`` selectors.
@@ -231,11 +237,13 @@ class ParsedResponse:
         if self._tree is None:
             try:
                 from selectolax.parser import HTMLParser
+
                 self._tree = HTMLParser(self._response.body)
                 self._backend = "selectolax"
             except ImportError:
                 try:
                     from parsel import Selector
+
                     self._tree = Selector(text=self._response.text)
                     self._backend = "parsel"
                 except ImportError:
@@ -268,6 +276,7 @@ class ParsedResponse:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_text_query(query: str) -> bool:
     return query.endswith("::text") or "::attr(" in query
@@ -329,6 +338,7 @@ def _xpath_on_node(node: Any, query: str, backend: str) -> SelectorList:
     # selectolax has no xpath — convert node HTML to parsel
     try:
         from parsel import Selector
+
         html = node.html if hasattr(node, "html") else str(node)
         sel = Selector(text=html)
         matched = sel.xpath(query)

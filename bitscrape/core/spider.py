@@ -1,6 +1,7 @@
 """
 Base Spider — all user spiders subclass this.
 """
+
 from __future__ import annotations
 
 import logging
@@ -46,7 +47,9 @@ class Spider:
 
     def __init__(self, settings: Settings | None = None) -> None:
         if not self.name:
-            raise ValueError(f"{self.__class__.__name__} must define a `name` attribute")
+            raise ValueError(
+                f"{self.__class__.__name__} must define a `name` attribute"
+            )
         self.settings = settings or Settings()
         self.logger = logging.getLogger(self.name)
 

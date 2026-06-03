@@ -13,6 +13,7 @@ Built-in pipelines:
   - DedupPipeline     – drop duplicate items (by configurable key function)
   - PostgresPipeline  – async upsert to PostgreSQL via asyncpg
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 # Sentinel exception
 # ---------------------------------------------------------------------------
 
+
 class DropItem(Exception):
     """Raise inside process_item to silently discard the item."""
 
@@ -37,6 +39,7 @@ class DropItem(Exception):
 # ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
+
 
 class BasePipeline(ABC):
     async def open_spider(self, spider: Any) -> None:
@@ -53,6 +56,7 @@ class BasePipeline(ABC):
 # ---------------------------------------------------------------------------
 # Built-in pipelines
 # ---------------------------------------------------------------------------
+
 
 class LoggingPipeline(BasePipeline):
     """Log every scraped item at DEBUG level."""
@@ -128,6 +132,7 @@ class PostgresPipeline(BasePipeline):
             return
         try:
             import asyncpg
+
             self._conn = await asyncpg.connect(db_url)
             logger.info("PostgresPipeline connected to %s", db_url)
         except Exception as exc:
@@ -144,7 +149,9 @@ class PostgresPipeline(BasePipeline):
         query = f'INSERT INTO "{self._table}" ({col_str}) VALUES ({placeholders})'
         if self._conflict_cols:
             conflict = ", ".join(f'"{c}"' for c in self._conflict_cols)
-            updates = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c not in self._conflict_cols)
+            updates = ", ".join(
+                f'"{c}" = EXCLUDED."{c}"' for c in cols if c not in self._conflict_cols
+            )
             query += f" ON CONFLICT ({conflict}) DO UPDATE SET {updates}"
         await self._conn.execute(query, *vals)
         return item
@@ -157,6 +164,7 @@ class PostgresPipeline(BasePipeline):
 # ---------------------------------------------------------------------------
 # Pipeline manager
 # ---------------------------------------------------------------------------
+
 
 class PipelineManager:
     """

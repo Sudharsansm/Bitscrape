@@ -2,6 +2,7 @@ CHANGELOG.md
 LICENSE
 MANIFEST.in
 README.md
+README.rst
 pyproject.toml
 bitscrape/__init__.py
 bitscrape/engine.py

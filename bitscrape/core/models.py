@@ -2,6 +2,7 @@
 Core Pydantic models for Bitscrape.
 All data contracts are strongly typed — no bare dicts in the hot path.
 """
+
 from __future__ import annotations
 
 import time
@@ -11,10 +12,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Request / Response
 # ---------------------------------------------------------------------------
+
 
 class RequestPriority(int, Enum):
     HIGH = 0
@@ -69,6 +70,7 @@ class Response(BaseModel):
 # Items – scraped data entities
 # ---------------------------------------------------------------------------
 
+
 class BaseItem(BaseModel):
     """All scraped item models should inherit from this."""
 
@@ -81,6 +83,7 @@ class BaseItem(BaseModel):
 # ---------------------------------------------------------------------------
 # Stats
 # ---------------------------------------------------------------------------
+
 
 class CrawlStats(BaseModel):
     requests_made: int = 0

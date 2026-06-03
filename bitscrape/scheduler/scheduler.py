@@ -7,6 +7,7 @@ Manages the crawl queue. Two backends:
 
 Requests are deduplicated via the DupeFilter before enqueuing.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Queue abstraction
 # ---------------------------------------------------------------------------
+
 
 class BaseQueue(ABC):
     @abstractmethod
@@ -83,11 +85,13 @@ class RedisQueue(BaseQueue):
 
     async def push(self, request: Request) -> None:
         import orjson
+
         payload = orjson.dumps(request.model_dump())
         await self._redis.zadd(self._key, {payload: request.priority.value})
 
     async def pop(self) -> Request | None:
         import orjson
+
         items = await self._redis.zpopmin(self._key, 1)
         if not items:
             return None
@@ -109,6 +113,7 @@ class RedisQueue(BaseQueue):
 # ---------------------------------------------------------------------------
 # Scheduler
 # ---------------------------------------------------------------------------
+
 
 class Scheduler:
     """
@@ -132,6 +137,7 @@ class Scheduler:
     async def from_settings(cls, settings: Settings) -> "Scheduler":
         if settings.scheduler_use_redis:
             import redis.asyncio as aioredis
+
             client = aioredis.from_url(settings.redis_url, decode_responses=False)
             queue = RedisQueue(client)
             dupefilter: BaseDupeFilter = RedisDupeFilter(client)
@@ -146,7 +152,10 @@ class Scheduler:
         Returns True if enqueued, False if filtered (duplicate / depth exceeded).
         """
         # Depth check
-        if self.settings.max_depth is not None and request.depth > self.settings.max_depth:
+        if (
+            self.settings.max_depth is not None
+            and request.depth > self.settings.max_depth
+        ):
             logger.debug("Depth limit reached: %s", request.url)
             return False
 

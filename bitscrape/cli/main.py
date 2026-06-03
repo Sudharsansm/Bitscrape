@@ -8,6 +8,7 @@ Commands:
   bitscrape list
   bitscrape version
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -40,6 +41,7 @@ def _setup_logging(level: str) -> None:
 # Main group
 # ---------------------------------------------------------------------------
 
+
 @click.group()
 @click.version_option("0.1.0", prog_name="bitscrape")
 def cli() -> None:
@@ -49,6 +51,7 @@ def cli() -> None:
 # ---------------------------------------------------------------------------
 # crawl
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 @click.argument("spider_path")
@@ -94,7 +97,11 @@ def crawl(
     from bitscrape.core.settings import Settings
     from bitscrape.engine import Engine
     from bitscrape.exporters.feed import get_exporter
-    from bitscrape.middleware.middleware import CookieMiddleware, RobotsMiddleware, UserAgentMiddleware
+    from bitscrape.middleware.middleware import (
+        CookieMiddleware,
+        RobotsMiddleware,
+        UserAgentMiddleware,
+    )
 
     overrides: dict[str, Any] = {}
     if no_robots:
@@ -118,7 +125,12 @@ def crawl(
         exporter=exporter,
     )
 
-    console.print(Panel(f"[bold cyan]Running spider:[/bold cyan] [yellow]{spider.name}[/yellow]", expand=False))
+    console.print(
+        Panel(
+            f"[bold cyan]Running spider:[/bold cyan] [yellow]{spider.name}[/yellow]",
+            expand=False,
+        )
+    )
 
     try:
         stats = asyncio.run(engine.run())
@@ -143,6 +155,7 @@ def crawl(
 # ---------------------------------------------------------------------------
 # startproject
 # ---------------------------------------------------------------------------
+
 
 @cli.command()
 @click.argument("name")
@@ -174,10 +187,13 @@ def startproject(name: str) -> None:
 # genspider
 # ---------------------------------------------------------------------------
 
+
 @cli.command()
 @click.argument("name")
 @click.argument("domain")
-@click.option("--template", default="basic", type=click.Choice(["basic", "crawl", "sitemap"]))
+@click.option(
+    "--template", default="basic", type=click.Choice(["basic", "crawl", "sitemap"])
+)
 def genspider(name: str, domain: str, template: str) -> None:
     """Generate a spider template."""
     dest = Path("spiders") / f"{name}.py"
@@ -198,6 +214,7 @@ def genspider(name: str, domain: str, template: str) -> None:
 # list
 # ---------------------------------------------------------------------------
 
+
 @cli.command(name="list")
 @click.option("--dir", "spiders_dir", default="spiders", show_default=True)
 def list_spiders(spiders_dir: str) -> None:
@@ -217,6 +234,7 @@ def list_spiders(spiders_dir: str) -> None:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _load_spider(path_or_module: str) -> type | None:
     """Load a spider class from a file path or dotted module path."""
     import inspect
@@ -225,7 +243,9 @@ def _load_spider(path_or_module: str) -> type | None:
 
     # File path
     if path_or_module.endswith(".py"):
-        spec = importlib.util.spec_from_file_location("_bitscrape_spider", path_or_module)
+        spec = importlib.util.spec_from_file_location(
+            "_bitscrape_spider", path_or_module
+        )
         if spec is None or spec.loader is None:
             return None
         mod = importlib.util.module_from_spec(spec)
@@ -243,7 +263,7 @@ def _load_spider(path_or_module: str) -> type | None:
 # Spider templates
 # ---------------------------------------------------------------------------
 
-_BASIC_TEMPLATE = '''\
+_BASIC_TEMPLATE = """\
 from bitscrape.core.spider import Spider
 from bitscrape.parser.selector import ParsedResponse
 
@@ -256,9 +276,9 @@ class {name}Spider(Spider):
         # TODO: implement parsing
         title = response.css("title::text").get()
         yield {{"url": response.url, "title": title}}
-'''
+"""
 
-_CRAWL_TEMPLATE = '''\
+_CRAWL_TEMPLATE = """\
 from bitscrape.core.spider import Spider
 from bitscrape.core.models import Request
 from bitscrape.parser.selector import ParsedResponse
@@ -278,9 +298,9 @@ class {name}Spider(Spider):
         nxt = response.css("a.next::attr(href)").get()
         if nxt:
             yield self.follow(nxt)
-'''
+"""
 
-_SITEMAP_TEMPLATE = '''\
+_SITEMAP_TEMPLATE = """\
 from bitscrape.core.spider import Spider
 from bitscrape.parser.selector import ParsedResponse
 
@@ -296,4 +316,4 @@ class {name}Spider(Spider):
     async def parse_page(self, response: ParsedResponse):
         yield {{"url": response.url,
                "title": response.css("title::text").get()}}
-'''
+"""
