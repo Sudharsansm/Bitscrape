@@ -1,2 +1,0 @@
-[console_scripts]
-bitscrape = bitscrape.cli.main:cli

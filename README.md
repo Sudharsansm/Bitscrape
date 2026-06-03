@@ -1,47 +1,48 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sudharsansm/Bitscrape/main/docs/bitscrape.png" width="500" alt="Bitscrape">
+</p>
 
-.. |logo| image:: https://raw.githubusercontent.com/Sudharsansm/bitscrape/main/docs/_static/logo.svg
-:target: https://github.com/Sudharsansm/bitscrape
-:alt: Bitscrape
-:width: 480px
+<h1 align="center">Bitscrape</h1>
 
-|version| |python_version|
+<p align="center">
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/v/bitscrape.svg">
+  </a>
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/pyversions/bitscrape.svg">
+  </a>
+  <a href="https://github.com/Sudharsansm/Bitscrape/blob/main/LICENSE">
+    <img src="https://img.shields.io/pypi/l/bitscrape.svg">
+  </a>
+</p>
 
-.. |version| image:: https://img.shields.io/pypi/v/bitscrape.svg
-:target: https://github.com/Sudharsansm/Bitscrape
-:alt: PyPI Version
+Bitscrape is a modern, production-grade asynchronous web scraping framework
+built for high-performance crawling, structured data extraction, and browser
+automation.
 
-.. |python_version| image:: https://img.shields.io/pypi/pyversions/bitscrape.svg
-:target: https://pypi.org/project/bitscrape/
-:alt: Supported Python Versions
+## Install
 
-Bitscrape_ is a modern, production-grade asynchronous web scraping framework
-built for high-performance crawling, data extraction, and automation.
-
-It provides fast async networking, powerful HTML parsing, configurable
-pipelines, distributed crawling support, and optional browser automation.
-
-.. _Bitscrape: https://github.com/Sudharsansm/bitscrape
-
-Install with:
-
-.. code:: bash
-
-```
+```bash
 pip install bitscrape
 ```
 
-Or with uv:
+or
 
-.. code:: bash
-
-```
+```bash
 uv add bitscrape
 ```
 
-And follow the documentation_ to learn how to use it.
+## Documentation
 
-.. _documentation: https://github.com/Sudharsansm/bitscrape
+* Repository: https://github.com/Sudharsansm/Bitscrape
+* Issues: https://github.com/Sudharsansm/Bitscrape/issues
 
-If you wish to contribute, see Contributing_.
+# Run 
+bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
 
-.. _Contributing: https://github.com/Sudharsansm/bitscrape/blob/main/CONTRIBUTING.md
+## License
+
+MIT License
+
+```
+```

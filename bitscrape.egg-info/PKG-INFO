@@ -2,22 +2,24 @@ Metadata-Version: 2.4
 Name: bitscrape
 Version: 0.1.0
 Summary: A modern, production-grade async web scraping framework
-Author: Bitscrape Contributors
+Author-email: Sudharsan S M <sudharsanmani423@gmail.com>
 License: MIT
-Project-URL: Homepage, https://github.com/yourorg/bitscrape
-Project-URL: Documentation, https://github.com/yourorg/bitscrape#readme
-Project-URL: Repository, https://github.com/yourorg/bitscrape
-Project-URL: Bug Tracker, https://github.com/yourorg/bitscrape/issues
-Project-URL: Changelog, https://github.com/yourorg/bitscrape/CHANGELOG.md
-Keywords: scraping,crawler,async,pydantic,playwright,spider
+Project-URL: Homepage, https://github.com/Sudharsansm/Bitscrape
+Project-URL: Documentation, https://github.com/Sudharsansm/Bitscrape#readme
+Project-URL: Repository, https://github.com/Sudharsansm/Bitscrape
+Project-URL: Bug Tracker, https://github.com/Sudharsansm/Bitscrape/issues
+Project-URL: Changelog, https://github.com/Sudharsansm/Bitscrape/releases
+Keywords: web-scraping,crawler,async,pydantic,playwright,automation,data-extraction,scrapy-alternative
 Classifier: Development Status :: 3 - Alpha
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
-Classifier: Topic :: Internet :: WWW/HTTP
-Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Programming Language :: Python :: 3.13
 Classifier: Framework :: AsyncIO
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries
 Classifier: Typing :: Typed
 Requires-Python: >=3.11
 Description-Content-Type: text/x-rst
@@ -32,268 +34,88 @@ Requires-Dist: rich>=13.0
 Requires-Dist: orjson>=3.9
 Requires-Dist: tenacity>=8.2
 Requires-Dist: httpx>=0.27
-Provides-Extra: playwright
-Requires-Dist: playwright>=1.43; extra == "playwright"
-Provides-Extra: redis
-Requires-Dist: redis>=5.0; extra == "redis"
-Provides-Extra: postgres
-Requires-Dist: asyncpg>=0.29; extra == "postgres"
-Provides-Extra: workflow
-Requires-Dist: langgraph>=0.1; extra == "workflow"
-Requires-Dist: langchain-core>=0.2; extra == "workflow"
-Provides-Extra: speed
-Requires-Dist: uvloop>=0.19; sys_platform != "win32" and extra == "speed"
-Provides-Extra: full
-Requires-Dist: playwright>=1.43; extra == "full"
-Requires-Dist: redis>=5.0; extra == "full"
-Requires-Dist: asyncpg>=0.29; extra == "full"
-Requires-Dist: langgraph>=0.1; extra == "full"
-Requires-Dist: langchain-core>=0.2; extra == "full"
-Requires-Dist: uvloop>=0.19; sys_platform != "win32" and extra == "full"
-Provides-Extra: dev
-Requires-Dist: pytest>=8.0; extra == "dev"
-Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
-Requires-Dist: pytest-cov>=5.0; extra == "dev"
-Requires-Dist: mypy>=1.9; extra == "dev"
-Requires-Dist: ruff>=0.4; extra == "dev"
-Requires-Dist: aioresponses>=0.7; extra == "dev"
-Requires-Dist: build>=1.0; extra == "dev"
-Requires-Dist: twine>=5.0; extra == "dev"
 Dynamic: license-file
 
 |logo|
 
-.. |logo| image:: docs/_static/logo.png
-   :target: https://github.com/Sudharsansm/bitscrape
-   :alt: Bitscrape
-   :width: 480px
+.. |logo| image:: https://raw.githubusercontent.com/Sudharsansm/Bitscrape/main/docs/bitscrape.png
+:target: https://github.com/Sudharsansm/Bitscrape
+:alt: Bitscrape
+:width: 480px
 
-|version| |python_version| |ubuntu| |macos| |windows| |coverage| |license| |downloads|
+|version| |python_version| |license|
 
 .. |version| image:: https://img.shields.io/pypi/v/bitscrape.svg
-   :target: https://pypi.org/project/bitscrape/
-   :alt: PyPI Version
+:target: https://pypi.org/project/bitscrape/
+:alt: PyPI Version
 
 .. |python_version| image:: https://img.shields.io/pypi/pyversions/bitscrape.svg
-   :target: https://pypi.org/project/bitscrape/
-   :alt: Supported Python Versions
-
-.. |ubuntu| image:: https://github.com/Sudharsansm/bitscrape/workflows/Ubuntu/badge.svg
-   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AUbuntu
-   :alt: Ubuntu
-
-.. |macos| image:: https://github.com/Sudharsansm/bitscrape/workflows/macOS/badge.svg
-   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AmacOS
-   :alt: macOS
-
-.. |windows| image:: https://github.com/Sudharsansm/bitscrape/workflows/Windows/badge.svg
-   :target: https://github.com/Sudharsansm/bitscrape/actions?query=workflow%3AWindowsc:\Users\sudha\Downloads\bitscrape.png
-   :alt: Windows
-
-.. |coverage| image:: https://img.shields.io/codecov/c/github/Sudharsansm/bitscrape/main.svg
-   :target: https://codecov.io/github/Sudharsansm/bitscrape?branch=main
-   :alt: Coverage report
+:target: https://pypi.org/project/bitscrape/
+:alt: Supported Python Versions
 
 .. |license| image:: https://img.shields.io/pypi/l/bitscrape.svg
-   :target: https://github.com/Sudharsansm/bitscrape/blob/main/LICENSE
-   :alt: License
+:target: https://github.com/Sudharsansm/Bitscrape/blob/main/LICENSE
+:alt: License
 
-.. |downloads| image:: https://img.shields.io/pypi/dm/bitscrape.svg
-   :target: https://pypi.org/project/bitscrape/
-   :alt: Monthly Downloads
+# Bitscrape
 
-`Bitscrape`_ is a modern, production-grade async web scraping framework for
-extracting structured data from websites at scale.
+Bitscrape is a modern, production-grade asynchronous web scraping framework
+built for high-performance crawling, structured data extraction, and browser
+automation.
 
-It is cross-platform, requires Python 3.11+, and is built on ``asyncio``,
-`Pydantic`_ v2, and `Playwright`_ for JavaScript rendering. It is maintained
-by `its contributors`_.
+It provides fast async networking, powerful HTML parsing, configurable
+pipelines, distributed crawling support, and optional browser rendering with
+Playwright.
 
-.. _Bitscrape: https://github.com/Sudharsansm/bitscrape
-.. _Pydantic: https://docs.pydantic.dev/
-.. _Playwright: https://playwright.dev/python/
-.. _its contributors: https://github.com/Sudharsansm/bitscrape/graphs/contributors
+# Features
 
-Overview
-========
+* Async-first architecture built on `asyncio`
+* High-performance HTTP crawling
+* CSS and XPath selectors
+* Type-safe models powered by Pydantic v2
+* Built-in Playwright support
+* Redis-based distributed crawling
+* Item pipelines and exporters
+* JSON, JSONL, CSV, and XML output
+* Cross-platform support
+* Rich CLI experience
 
-Bitscrape gives you everything you need to build and run production scrapers:
+# Install
 
-* **Async by default** — built on ``asyncio`` and ``aiohttp`` for thousands of
-  concurrent requests with minimal overhead
-* **Type-safe data** — all items, requests, responses, and settings are
-  `Pydantic`_ v2 models; no silent type errors in your pipeline
-* **JavaScript rendering** — built-in `Playwright`_ support for SPAs and
-  dynamic pages; no plugin required
-* **Single import** — the entire framework is accessible from ``import bitscrape``
-* **Distributed mode** — switch from in-memory to Redis queue with one
-  environment variable for horizontal scaling across workers
-* **Familiar API** — spider class, CSS/XPath selectors, item pipelines, and
-  a ``bitscrape`` CLI that will feel natural to anyone who has used Scrapy
-
-Install
-=======
+Using pip:
 
 .. code:: bash
 
-    pip install bitscrape
+pip install bitscrape
 
-With JavaScript rendering support:
-
-.. code:: bash
-
-    pip install "bitscrape[playwright]"
-    playwright install chromium
-
-With distributed (Redis) mode:
+Using uv:
 
 .. code:: bash
 
-    pip install "bitscrape[redis]"
+uv add bitscrape
 
-Install everything:
-
-.. code:: bash
-
-    pip install "bitscrape[full]"
-
-Or with ``uv``:
+Playwright support:
 
 .. code:: bash
 
-    uv add bitscrape
+pip install "bitscrape[playwright]"
 
-Quickstart
-==========
+playwright install chromium
 
-Define a spider and run it in under five minutes:
+# Documentation
 
-.. code:: python
+* GitHub Repository:
+  https://github.com/Sudharsansm/Bitscrape
 
-    import bitscrape
+* Issue Tracker:
+  https://github.com/Sudharsansm/Bitscrape/issues
 
-    class QuotesSpider(bitscrape.Spider):
-        name = "quotes"
-        start_urls = ["https://quotes.toscrape.com/"]
-
-        async def parse(self, response):
-            for quote in response.css("div.quote"):
-                yield {
-                    "text":   quote.css("span.text::text").get(),
-                    "author": quote.css("small.author::text").get(),
-                    "tags":   quote.css("div.tags a.tag::text").getall(),
-                }
-            next_page = response.css("li.next a::attr(href)").get()
-            if next_page:
-                yield self.follow(f"https://quotes.toscrape.com{next_page}")
-
-    if __name__ == "__main__":
-        stats = bitscrape.run(QuotesSpider, output="quotes.jsonl")
-        print(f"Scraped {stats.items_scraped} quotes in {stats.elapsed:.1f}s")
-
-Or run from the command line:
+# Run
 
 .. code:: bash
 
-    bitscrape crawl quotes_spider.py -o quotes.jsonl
+bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
 
-Type-safe items with `Pydantic`_:
+# License
 
-.. code:: python
-
-    import bitscrape
-
-    class QuoteItem(bitscrape.Item):
-        text:   str
-        author: str
-        tags:   list[str] = []
-
-    class QuotesSpider(bitscrape.Spider):
-        name = "quotes"
-        start_urls = ["https://quotes.toscrape.com/"]
-
-        async def parse(self, response):
-            for quote in response.css("div.quote"):
-                yield QuoteItem(
-                    text=quote.css("span.text::text").get(default=""),
-                    author=quote.css("small.author::text").get(default=""),
-                    tags=quote.css("div.tags a.tag::text").getall(),
-                )
-
-CLI Commands
-============
-
-.. code:: bash
-
-    bitscrape startproject myproject      # scaffold a new project
-    bitscrape genspider myspider site.com # generate a spider template
-    bitscrape crawl myspider.py -o out.jsonl  # run a spider
-    bitscrape list                        # list all spiders in project
-
-Export Formats
-==============
-
-.. code:: bash
-
-    bitscrape crawl myspider.py -o data.jsonl   # JSON Lines (recommended)
-    bitscrape crawl myspider.py -o data.json    # JSON array
-    bitscrape crawl myspider.py -o data.csv     # CSV spreadsheet
-    bitscrape crawl myspider.py -o data.xml     # XML
-
-Distributed Mode
-================
-
-Share a Redis queue across multiple worker processes for horizontal scaling:
-
-.. code:: bash
-
-    export BITSCRAPE_SCHEDULER_USE_REDIS=true
-    export BITSCRAPE_REDIS_URL=redis://localhost:6379/0
-
-    # Start as many workers as needed — they all share the queue
-    bitscrape crawl myspider.py &
-    bitscrape crawl myspider.py &
-    bitscrape crawl myspider.py &
-
-JavaScript Rendering
-====================
-
-Mark individual requests to be rendered by `Playwright`_ (Chromium):
-
-.. code:: python
-
-    async def parse(self, response):
-        # Follow a JavaScript-rendered page
-        yield self.follow("/dynamic-page", use_playwright=True)
-
-Requirements
-============
-
-* Python 3.11+
-* Works on Linux, macOS, and Windows
-* Core dependencies: ``aiohttp``, ``pydantic``, ``selectolax``, ``click``, ``rich``
-* Optional: ``playwright`` (JS rendering), ``redis`` (distributed), ``asyncpg`` (PostgreSQL)
-
-Contributing
-============
-
-Contributions are welcome! Please read `CONTRIBUTING.md`_ before submitting a
-pull request.
-
-.. _CONTRIBUTING.md: https://github.com/Sudharsansm/bitscrape/blob/main/CONTRIBUTING.md
-
-To set up a development environment:
-
-.. code:: bash
-
-    git clone https://github.com/Sudharsansm/bitscrape.git
-    cd bitscrape
-    pip install -e ".[dev]"
-    pytest tests/
-
-License
-=======
-
-Bitscrape is distributed under the `MIT License`_.
-
-.. _MIT License: https://github.com/Sudharsansm/bitscrape/blob/main/LICENSE
+Bitscrape is licensed under the MIT License.

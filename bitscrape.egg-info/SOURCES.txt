@@ -10,7 +10,6 @@ bitscrape/py.typed
 bitscrape.egg-info/PKG-INFO
 bitscrape.egg-info/SOURCES.txt
 bitscrape.egg-info/dependency_links.txt
-bitscrape.egg-info/entry_points.txt
 bitscrape.egg-info/requires.txt
 bitscrape.egg-info/top_level.txt
 bitscrape/cli/__init__.py
