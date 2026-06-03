@@ -1,6 +1,6 @@
 
-.. |logo| image:: https://raw.githubusercontent.com/your-org/bitscrape/main/docs/_static/logo.svg
-:target: https://github.com/your-org/bitscrape
+.. |logo| image:: https://raw.githubusercontent.com/Sudharsansm/bitscrape/main/docs/_static/logo.svg
+:target: https://github.com/Sudharsansm/bitscrape
 :alt: Bitscrape
 :width: 480px
 
@@ -20,7 +20,7 @@ built for high-performance crawling, data extraction, and automation.
 It provides fast async networking, powerful HTML parsing, configurable
 pipelines, distributed crawling support, and optional browser automation.
 
-.. _Bitscrape: https://github.com/your-org/bitscrape
+.. _Bitscrape: https://github.com/Sudharsansm/bitscrape
 
 Install with:
 
@@ -40,8 +40,8 @@ uv add bitscrape
 
 And follow the documentation_ to learn how to use it.
 
-.. _documentation: https://github.com/your-org/bitscrape
+.. _documentation: https://github.com/Sudharsansm/bitscrape
 
 If you wish to contribute, see Contributing_.
 
-.. _Contributing: https://github.com/your-org/bitscrape/blob/main/CONTRIBUTING.md
+.. _Contributing: https://github.com/Sudharsansm/bitscrape/blob/main/CONTRIBUTING.md
