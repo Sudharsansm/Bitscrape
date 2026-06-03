@@ -52,6 +52,13 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
 [project.urls]
 Homepage = "https://github.com/Sudharsansm/Bitscrape"
 Documentation = "https://github.com/Sudharsansm/Bitscrape#readme"

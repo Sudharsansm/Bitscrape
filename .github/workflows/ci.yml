@@ -10,6 +10,7 @@ jobs:
   test:
     name: Test Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -17,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -25,11 +26,11 @@ jobs:
       - name: Install uv
         run: pip install uv
 
-      - name: Install dependencies
-        run: uv pip install -e ".[dev]" --system
+      - name: Install project
+        run: uv pip install -e .
 
-      - name: Install selectolax
-        run: uv pip install selectolax --system
+      - name: Install test tools
+        run: uv pip install pytest pytest-cov ruff --system
 
       - name: Run tests
         run: pytest tests/ --cov=bitscrape --cov-report=xml
@@ -43,11 +44,15 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install ruff
+
       - run: ruff check bitscrape/
       - run: ruff format --check bitscrape/
