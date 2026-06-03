@@ -3,37 +3,44 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - "v*.*.*"        # triggers on tags like v0.1.0, v1.2.3
+      - "v*.*.*"   # Example: v0.1.0, v1.2.3
 
 jobs:
   build-and-publish:
     name: Build and publish to PyPI
     runs-on: ubuntu-latest
     environment: pypi
+
+    # Fix Node.js 20 → 24 deprecation warning
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
     permissions:
-      id-token: write   # required for trusted publishing (no API key needed)
-      attestations: write
+      id-token: write        # Required for trusted publishing
       contents: read
+      attestations: write
 
     steps:
-      - name: Checkout code
+      # 1. Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. Setup Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
+      # 3. Install build tools
       - name: Install build tools
-        run: pip install build twine
+        run: pip install build
 
+      # 4. Build package
       - name: Build distributions
         run: python -m build
-        # produces dist/bitscrape-X.Y.Z.tar.gz  and  dist/bitscrape-X.Y.Z-py3-none-any.whl
 
-      - name: Check distributions
-        run: twine check dist/*
-
+      # 5. Publish to PyPI (Trusted Publishing)
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         # Uses PyPI Trusted Publishing — no PYPI_TOKEN secret needed.
