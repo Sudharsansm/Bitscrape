@@ -2,27 +2,25 @@ Metadata-Version: 2.4
 Name: bitscrape
 Version: 0.1.0
 Summary: A modern, production-grade async web scraping framework
-Author-email: Sudharsan S M <sudharsanmani423@gmail.com>
+Author: Bitscrape Contributors
 License: MIT
-Project-URL: Homepage, https://github.com/Sudharsansm/Bitscrape
-Project-URL: Documentation, https://github.com/Sudharsansm/Bitscrape#readme
-Project-URL: Repository, https://github.com/Sudharsansm/Bitscrape
-Project-URL: Bug Tracker, https://github.com/Sudharsansm/Bitscrape/issues
-Project-URL: Changelog, https://github.com/Sudharsansm/Bitscrape/releases
-Keywords: web-scraping,crawler,async,pydantic,playwright,automation,data-extraction,scrapy-alternative
+Project-URL: Homepage, https://github.com/yourorg/bitscrape
+Project-URL: Documentation, https://github.com/yourorg/bitscrape#readme
+Project-URL: Repository, https://github.com/yourorg/bitscrape
+Project-URL: Bug Tracker, https://github.com/yourorg/bitscrape/issues
+Project-URL: Changelog, https://github.com/yourorg/bitscrape/CHANGELOG.md
+Keywords: scraping,crawler,async,pydantic,playwright,spider
 Classifier: Development Status :: 3 - Alpha
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
-Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
-Classifier: Programming Language :: Python :: 3.13
-Classifier: Framework :: AsyncIO
 Classifier: Topic :: Internet :: WWW/HTTP
-Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Framework :: AsyncIO
 Classifier: Typing :: Typed
 Requires-Python: >=3.11
-Description-Content-Type: text/x-rst
+Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: aiohttp>=3.9
 Requires-Dist: pydantic>=2.6
@@ -34,88 +32,80 @@ Requires-Dist: rich>=13.0
 Requires-Dist: orjson>=3.9
 Requires-Dist: tenacity>=8.2
 Requires-Dist: httpx>=0.27
+Provides-Extra: playwright
+Requires-Dist: playwright>=1.43; extra == "playwright"
+Provides-Extra: redis
+Requires-Dist: redis>=5.0; extra == "redis"
+Provides-Extra: postgres
+Requires-Dist: asyncpg>=0.29; extra == "postgres"
+Provides-Extra: workflow
+Requires-Dist: langgraph>=0.1; extra == "workflow"
+Requires-Dist: langchain-core>=0.2; extra == "workflow"
+Provides-Extra: speed
+Requires-Dist: uvloop>=0.19; sys_platform != "win32" and extra == "speed"
+Provides-Extra: full
+Requires-Dist: playwright>=1.43; extra == "full"
+Requires-Dist: redis>=5.0; extra == "full"
+Requires-Dist: asyncpg>=0.29; extra == "full"
+Requires-Dist: langgraph>=0.1; extra == "full"
+Requires-Dist: langchain-core>=0.2; extra == "full"
+Requires-Dist: uvloop>=0.19; sys_platform != "win32" and extra == "full"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: mypy>=1.9; extra == "dev"
+Requires-Dist: ruff>=0.4; extra == "dev"
+Requires-Dist: aioresponses>=0.7; extra == "dev"
+Requires-Dist: build>=1.0; extra == "dev"
+Requires-Dist: twine>=5.0; extra == "dev"
 Dynamic: license-file
 
-|logo|
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sudharsansm/Bitscrape/main/docs/bitscrape.png" width="500" alt="Bitscrape">
+</p>
 
-.. |logo| image:: https://raw.githubusercontent.com/Sudharsansm/Bitscrape/main/docs/bitscrape.png
-:target: https://github.com/Sudharsansm/Bitscrape
-:alt: Bitscrape
-:width: 480px
+<h1 align="center">Bitscrape</h1>
 
-|version| |python_version| |license|
-
-.. |version| image:: https://img.shields.io/pypi/v/bitscrape.svg
-:target: https://pypi.org/project/bitscrape/
-:alt: PyPI Version
-
-.. |python_version| image:: https://img.shields.io/pypi/pyversions/bitscrape.svg
-:target: https://pypi.org/project/bitscrape/
-:alt: Supported Python Versions
-
-.. |license| image:: https://img.shields.io/pypi/l/bitscrape.svg
-:target: https://github.com/Sudharsansm/Bitscrape/blob/main/LICENSE
-:alt: License
-
-# Bitscrape
+<p align="center">
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/v/bitscrape.svg">
+  </a>
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/pyversions/bitscrape.svg">
+  </a>
+  <a href="https://github.com/Sudharsansm/Bitscrape/blob/main/LICENSE">
+    <img src="https://img.shields.io/pypi/l/bitscrape.svg">
+  </a>
+</p>
 
 Bitscrape is a modern, production-grade asynchronous web scraping framework
 built for high-performance crawling, structured data extraction, and browser
 automation.
 
-It provides fast async networking, powerful HTML parsing, configurable
-pipelines, distributed crawling support, and optional browser rendering with
-Playwright.
+## Install
 
-# Features
-
-* Async-first architecture built on `asyncio`
-* High-performance HTTP crawling
-* CSS and XPath selectors
-* Type-safe models powered by Pydantic v2
-* Built-in Playwright support
-* Redis-based distributed crawling
-* Item pipelines and exporters
-* JSON, JSONL, CSV, and XML output
-* Cross-platform support
-* Rich CLI experience
-
-# Install
-
-Using pip:
-
-.. code:: bash
-
+```bash
 pip install bitscrape
+```
 
-Using uv:
+or
 
-.. code:: bash
-
+```bash
 uv add bitscrape
+```
 
-Playwright support:
+## Documentation
 
-.. code:: bash
+* Repository: https://github.com/Sudharsansm/Bitscrape
+* Issues: https://github.com/Sudharsansm/Bitscrape/issues
 
-pip install "bitscrape[playwright]"
-
-playwright install chromium
-
-# Documentation
-
-* GitHub Repository:
-  https://github.com/Sudharsansm/Bitscrape
-
-* Issue Tracker:
-  https://github.com/Sudharsansm/Bitscrape/issues
-
-# Run
-
-.. code:: bash
-
+# Run 
 bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
 
-# License
+## License
 
-Bitscrape is licensed under the MIT License.
+MIT License
+
+```
+```
