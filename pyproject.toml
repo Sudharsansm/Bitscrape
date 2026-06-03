@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 name = "bitscrape"
 version = "0.1.0"
 description = "A modern, production-grade async web scraping framework"
-readme = "README.md"
+readme = { file = "README.rst", content-type = "text/x-rst" }
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Bitscrape Contributors" }]
