@@ -12,9 +12,12 @@ jobs:
     environment: pypi
     permissions:
       id-token: write   # required for trusted publishing (no API key needed)
+      attestations: write
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
