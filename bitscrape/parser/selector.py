@@ -16,7 +16,8 @@ Key design:
 from __future__ import annotations
 
 import logging
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from bitscrape.core.models import Response
 
@@ -47,10 +48,10 @@ class NodeSelector:
     # Selector methods
     # ------------------------------------------------------------------
 
-    def css(self, query: str) -> "SelectorList":
+    def css(self, query: str) -> SelectorList:
         return _css_on_node(self._node, query, self._backend)
 
-    def xpath(self, query: str) -> "SelectorList":
+    def xpath(self, query: str) -> SelectorList:
         return _xpath_on_node(self._node, query, self._backend)
 
     # ------------------------------------------------------------------
@@ -86,9 +87,7 @@ class NodeSelector:
 
     def __repr__(self) -> str:
         try:
-            tag = (
-                self._node.tag if self._backend == "selectolax" else self._node.root.tag
-            )
+            tag = self._node.tag if self._backend == "selectolax" else self._node.root.tag
         except Exception:
             tag = "?"
         return f"<NodeSelector tag={tag!r}>"
@@ -162,14 +161,14 @@ class SelectorList:
     # Chained selectors (apply query to every node in the list)
     # ------------------------------------------------------------------
 
-    def css(self, query: str) -> "SelectorList":
+    def css(self, query: str) -> SelectorList:
         results: list[Any] = []
         for item in self._items:
             if isinstance(item, NodeSelector):
                 results.extend(item.css(query)._items)
         return SelectorList(results, is_text=_is_text_query(query))
 
-    def xpath(self, query: str) -> "SelectorList":
+    def xpath(self, query: str) -> SelectorList:
         results: list[Any] = []
         for item in self._items:
             if isinstance(item, NodeSelector):
@@ -246,10 +245,10 @@ class ParsedResponse:
 
                     self._tree = Selector(text=self._response.text)
                     self._backend = "parsel"
-                except ImportError:
+                except ImportError as err:
                     raise ImportError(
                         "Install selectolax or parsel: pip install selectolax"
-                    )
+                    ) from err
         return self._tree
 
     # ------------------------------------------------------------------
@@ -349,5 +348,5 @@ def _xpath_on_node(node: Any, query: str, backend: str) -> SelectorList:
             else:
                 items.append(NodeSelector(m, backend="parsel"))
         return SelectorList(items, is_text=False)
-    except ImportError:
-        raise ImportError("XPath requires parsel: pip install parsel")
+    except ImportError as err:
+        raise ImportError("XPath requires parsel: pip install parsel") from err

@@ -17,9 +17,7 @@ class Settings(BaseSettings):
 
     # --- Downloader ----------------------------------------------------------
     download_timeout: float = Field(30.0, ge=1.0)
-    retry_http_codes: list[int] = Field(
-        default_factory=lambda: [500, 502, 503, 504, 429]
-    )
+    retry_http_codes: list[int] = Field(default_factory=lambda: [500, 502, 503, 504, 429])
     user_agent: str = "BitscrapeBot/0.1 (+https://github.com/yourorg/bitscrape)"
     follow_redirects: bool = True
     max_redirect_count: int = 10

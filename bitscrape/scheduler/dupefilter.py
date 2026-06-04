@@ -5,6 +5,11 @@ Uses a fast hashset (in-memory) or a Redis set for distributed mode.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import redis.asyncio
+
 import hashlib
 from abc import ABC, abstractmethod
 
@@ -51,7 +56,7 @@ class MemoryDupeFilter(BaseDupeFilter):
 class RedisDupeFilter(BaseDupeFilter):
     """Distributed dupe filter backed by a Redis set."""
 
-    def __init__(self, redis_client: "redis.asyncio.Redis", key: str = "bitscrape:dupes") -> None:  # type: ignore[name-defined]
+    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:dupes") -> None:  # type: ignore[name-defined]
         self._redis = redis_client
         self._key = key
 

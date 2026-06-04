@@ -31,7 +31,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Type
+from typing import Any
+
+# ── Pydantic helpers ───────────────────────────────────────────────────────
+from pydantic import Field
 
 # ── Core models ────────────────────────────────────────────────────────────
 from bitscrape.core.models import BaseItem, CrawlStats, Request, Response
@@ -40,20 +43,6 @@ from bitscrape.core.spider import Spider
 
 # ── Engine ─────────────────────────────────────────────────────────────────
 from bitscrape.engine import Engine
-
-# ── Parser / selectors ─────────────────────────────────────────────────────
-from bitscrape.parser.selector import NodeSelector, ParsedResponse, SelectorList
-
-# ── Pipelines ──────────────────────────────────────────────────────────────
-from bitscrape.pipeline.pipelines import (
-    BasePipeline,
-    DedupPipeline,
-    DropItem,
-    LoggingPipeline,
-    PipelineManager,
-    PostgresPipeline,
-    ValidationPipeline,
-)
 
 # ── Exporters ──────────────────────────────────────────────────────────────
 from bitscrape.exporters.feed import (
@@ -74,6 +63,20 @@ from bitscrape.middleware.middleware import (
     UserAgentMiddleware,
 )
 
+# ── Parser / selectors ─────────────────────────────────────────────────────
+from bitscrape.parser.selector import NodeSelector, ParsedResponse, SelectorList
+
+# ── Pipelines ──────────────────────────────────────────────────────────────
+from bitscrape.pipeline.pipelines import (
+    BasePipeline,
+    DedupPipeline,
+    DropItem,
+    LoggingPipeline,
+    PipelineManager,
+    PostgresPipeline,
+    ValidationPipeline,
+)
+
 # ── Scheduler ──────────────────────────────────────────────────────────────
 from bitscrape.scheduler.scheduler import MemoryQueue, RedisQueue, Scheduler
 
@@ -81,9 +84,6 @@ from bitscrape.scheduler.scheduler import MemoryQueue, RedisQueue, Scheduler
 
 # ``Item`` — short alias for BaseItem (like Scrapy's scrapy.Item)
 Item = BaseItem
-
-# ``Field`` — returns a Pydantic Field (covers scrapy.Field use-case)
-from pydantic import Field
 
 
 # ``FormRequest`` — a Request pre-configured for form submission
@@ -120,7 +120,7 @@ class FormRequest(Request):
 
 
 def run(
-    spider_cls: Type[Spider],
+    spider_cls: type[Spider],
     *,
     output: str | None = None,
     fmt: str = "jsonl",

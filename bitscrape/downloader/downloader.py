@@ -54,9 +54,7 @@ class Downloader:
             timeout=timeout,
             headers={"User-Agent": self.settings.user_agent},
         )
-        logger.info(
-            "Downloader opened (max_concurrent=%d)", self.settings.concurrent_requests
-        )
+        logger.info("Downloader opened (max_concurrent=%d)", self.settings.concurrent_requests)
 
     async def close(self) -> None:
         if self._session:
@@ -85,10 +83,9 @@ class Downloader:
         assert self._session is not None, "Call open() first"
         domain = _domain(request.url)
 
-        async with self._global_semaphore:
-            async with self._domain_semaphores[domain]:
-                await self._apply_delay(domain)
-                return await self._do_fetch(request)
+        async with self._global_semaphore, self._domain_semaphores[domain]:
+            await self._apply_delay(domain)
+            return await self._do_fetch(request)
 
     async def _do_fetch(self, request: Request) -> Response:
         assert self._session is not None
@@ -123,12 +120,10 @@ class Downloader:
                             resp.history,
                             status=resp.status,
                         )
-                    logger.debug(
-                        "GET %s → %d (%.0fms)", request.url, resp.status, elapsed
-                    )
+                    logger.debug("GET %s → %d (%.0fms)", request.url, resp.status, elapsed)
                     return response
 
-            except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+            except (TimeoutError, aiohttp.ClientError) as exc:
                 attempt += 1
                 last_exc = exc
                 if attempt <= request.max_retries:
@@ -154,17 +149,15 @@ class Downloader:
     async def _fetch_playwright(self, request: Request) -> Response:
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "playwright is required for JS rendering. "
                 "Install with: pip install bitscrape[playwright]"
-            )
+            ) from err
         t0 = time.monotonic()
         async with async_playwright() as pw:
             browser_type = getattr(pw, self.settings.playwright_browser)
-            browser = await browser_type.launch(
-                headless=self.settings.playwright_headless
-            )
+            browser = await browser_type.launch(headless=self.settings.playwright_headless)
             context = await browser.new_context(
                 extra_http_headers=request.headers or {},
                 user_agent=self.settings.user_agent,

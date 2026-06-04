@@ -146,7 +146,7 @@ def crawl(
     t.add_row("Failed", str(stats.requests_failed))
     t.add_row("Items scraped", str(stats.items_scraped))
     t.add_row("Items dropped", str(stats.items_dropped))
-    t.add_row("Downloaded", f"{stats.bytes_downloaded/1024:.1f} kB")
+    t.add_row("Downloaded", f"{stats.bytes_downloaded / 1024:.1f} kB")
     t.add_row("Elapsed", f"{stats.elapsed:.2f}s")
     t.add_row("RPS", f"{stats.rps:.1f}")
     console.print(t)
@@ -191,9 +191,7 @@ def startproject(name: str) -> None:
 @cli.command()
 @click.argument("name")
 @click.argument("domain")
-@click.option(
-    "--template", default="basic", type=click.Choice(["basic", "crawl", "sitemap"])
-)
+@click.option("--template", default="basic", type=click.Choice(["basic", "crawl", "sitemap"]))
 def genspider(name: str, domain: str, template: str) -> None:
     """Generate a spider template."""
     dest = Path("spiders") / f"{name}.py"
@@ -243,9 +241,7 @@ def _load_spider(path_or_module: str) -> type | None:
 
     # File path
     if path_or_module.endswith(".py"):
-        spec = importlib.util.spec_from_file_location(
-            "_bitscrape_spider", path_or_module
-        )
+        spec = importlib.util.spec_from_file_location("_bitscrape_spider", path_or_module)
         if spec is None or spec.loader is None:
             return None
         mod = importlib.util.module_from_spec(spec)

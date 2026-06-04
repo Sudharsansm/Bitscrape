@@ -5,7 +5,8 @@ Base Spider — all user spiders subclass this.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from bitscrape.core.models import BaseItem, Request, Response
 from bitscrape.core.settings import Settings
@@ -47,9 +48,7 @@ class Spider:
 
     def __init__(self, settings: Settings | None = None) -> None:
         if not self.name:
-            raise ValueError(
-                f"{self.__class__.__name__} must define a `name` attribute"
-            )
+            raise ValueError(f"{self.__class__.__name__} must define a `name` attribute")
         self.settings = settings or Settings()
         self.logger = logging.getLogger(self.name)
 
@@ -93,9 +92,7 @@ class Spider:
     # ------------------------------------------------------------------
 
     async def parse(self, response: Response) -> SpiderOutput:  # type: ignore[return]
-        raise NotImplementedError(
-            f"Spider {self.name!r} must implement an async `parse` method"
-        )
+        raise NotImplementedError(f"Spider {self.name!r} must implement an async `parse` method")
 
     # ------------------------------------------------------------------
     # Error handling

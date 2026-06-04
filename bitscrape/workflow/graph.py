@@ -48,10 +48,10 @@ def build_crawl_graph(engine: Any) -> Any:
     """
     try:
         from langgraph.graph import END, START, StateGraph
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
-            "langgraph is required for workflow orchestration. " "pip install langgraph"
-        )
+            "langgraph is required for workflow orchestration. pip install langgraph"
+        ) from err
 
     builder: StateGraph = StateGraph(CrawlState)  # type: ignore[type-arg]
 
@@ -129,8 +129,6 @@ def build_crawl_graph(engine: Any) -> Any:
     builder.add_edge(START, "fetch")
     builder.add_edge("fetch", "parse")
     builder.add_edge("parse", "pipeline")
-    builder.add_conditional_edges(
-        "pipeline", should_continue, {"fetch": "fetch", END: END}
-    )
+    builder.add_conditional_edges("pipeline", should_continue, {"fetch": "fetch", END: END})
 
     return builder.compile()

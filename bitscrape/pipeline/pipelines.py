@@ -42,14 +42,14 @@ class DropItem(Exception):
 
 
 class BasePipeline(ABC):
-    async def open_spider(self, spider: Any) -> None:
+    async def open_spider(self, spider: Any) -> None:  # noqa: B027
         """Called once before the spider starts."""
 
     @abstractmethod
     async def process_item(self, item: Any, spider: Any) -> Any:
         """Process one item. Return it to continue, raise DropItem to discard."""
 
-    async def close_spider(self, spider: Any) -> None:
+    async def close_spider(self, spider: Any) -> None:  # noqa: B027
         """Called once after the spider finishes."""
 
 
@@ -144,7 +144,7 @@ class PostgresPipeline(BasePipeline):
         data = item.model_dump() if isinstance(item, BaseModel) else item
         cols = list(data.keys())
         vals = list(data.values())
-        placeholders = ", ".join(f"${i+1}" for i in range(len(cols)))
+        placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
         col_str = ", ".join(f'"{c}"' for c in cols)
         query = f'INSERT INTO "{self._table}" ({col_str}) VALUES ({placeholders})'
         if self._conflict_cols:

@@ -152,7 +152,5 @@ _EXPORTERS: dict[str, type[BaseExporter]] = {
 def get_exporter(fmt: str, uri: str | None = None) -> BaseExporter:
     cls = _EXPORTERS.get(fmt.lower())
     if cls is None:
-        raise ValueError(
-            f"Unknown feed format {fmt!r}. Choose from: {list(_EXPORTERS)}"
-        )
+        raise ValueError(f"Unknown feed format {fmt!r}. Choose from: {list(_EXPORTERS)}")
     return cls(uri)

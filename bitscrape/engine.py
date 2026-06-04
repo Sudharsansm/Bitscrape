@@ -20,7 +20,7 @@ from typing import Any
 from bitscrape.core.models import CrawlStats, Request, Response
 from bitscrape.core.settings import Settings
 from bitscrape.core.spider import Spider
-from bitscrape.downloader.downloader import DownloadError, Downloader
+from bitscrape.downloader.downloader import Downloader, DownloadError
 from bitscrape.exporters.feed import BaseExporter
 from bitscrape.middleware.middleware import MiddlewareManager
 from bitscrape.parser.selector import ParsedResponse
@@ -122,15 +122,11 @@ class Engine:
     # Request processing
     # ------------------------------------------------------------------
 
-    async def _process_request(
-        self, request: Request, semaphore: asyncio.Semaphore
-    ) -> None:
+    async def _process_request(self, request: Request, semaphore: asyncio.Semaphore) -> None:
         async with semaphore:
             try:
                 # Middleware: process_request
-                result = await self._middleware_manager.process_request(
-                    request, self._spider
-                )
+                result = await self._middleware_manager.process_request(request, self._spider)
                 if isinstance(result, Response):
                     response = result  # short-circuited by middleware
                 elif isinstance(result, Request):
@@ -168,9 +164,7 @@ class Engine:
 
             except Exception as exc:
                 self._stats.requests_failed += 1
-                logger.error(
-                    "Unexpected error on %s: %s", request.url, exc, exc_info=True
-                )
+                logger.error("Unexpected error on %s: %s", request.url, exc, exc_info=True)
 
     async def _parse_response(self, request: Request, response: Response) -> None:
         # Resolve callback name → spider method
@@ -189,9 +183,7 @@ class Engine:
                 else:
                     # It's an item (dict or BaseModel)
                     self._stats.items_scraped += 1
-                    processed = await self._pipeline_manager.process_item(
-                        output, self._spider
-                    )
+                    processed = await self._pipeline_manager.process_item(output, self._spider)
                     if processed is None:
                         self._stats.items_dropped += 1
                     elif self._exporter:

@@ -10,6 +10,11 @@ Requests are deduplicated via the DupeFilter before enqueuing.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import redis.asyncio
+
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -78,7 +83,7 @@ class RedisQueue(BaseQueue):
     Value: JSON-serialised Request
     """
 
-    def __init__(self, redis_client: "redis.asyncio.Redis", key: str = "bitscrape:queue") -> None:  # type: ignore[name-defined]
+    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:queue") -> None:  # type: ignore[name-defined]
         self._redis = redis_client
         self._key = key
         self._size_cache = 0
@@ -134,7 +139,7 @@ class Scheduler:
         self._duped = 0
 
     @classmethod
-    async def from_settings(cls, settings: Settings) -> "Scheduler":
+    async def from_settings(cls, settings: Settings) -> Scheduler:
         if settings.scheduler_use_redis:
             import redis.asyncio as aioredis
 
@@ -152,10 +157,7 @@ class Scheduler:
         Returns True if enqueued, False if filtered (duplicate / depth exceeded).
         """
         # Depth check
-        if (
-            self.settings.max_depth is not None
-            and request.depth > self.settings.max_depth
-        ):
+        if self.settings.max_depth is not None and request.depth > self.settings.max_depth:
             logger.debug("Depth limit reached: %s", request.url)
             return False
 
