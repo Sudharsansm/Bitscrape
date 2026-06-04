@@ -33,7 +33,7 @@ jobs:
         run: pytest tests/ --cov=bitscrape --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: ./coverage.xml
         continue-on-error: true
