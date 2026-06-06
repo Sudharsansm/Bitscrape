@@ -44,5 +44,3 @@ bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
 
 MIT License
 
-```
-```
