@@ -1,0 +1,46 @@
+# Local development / integration-testing stack: bitscrape workers + Redis
+# for the distributed queue, dedup filter, and distributed throttle.
+#
+# NOTE: this compose file has been written to a valid, standard schema but
+# NOT executed against a live Docker daemon in this build environment (no
+# `docker` binary was available to verify with). Validate with
+# `docker compose config` before relying on it.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      BITSCRAPE_SCHEDULER_USE_REDIS: "true"
+      BITSCRAPE_REDIS_URL: "redis://redis:6379/0"
+      BITSCRAPE_DISTRIBUTED_THROTTLE_ENABLED: "true"
+    # Scale to N identical workers sharing the same Redis frontier/dedup:
+    #   docker compose up --scale worker=5
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    ports:
+      - "8765:8765" # StatsMonitor
+      - "9100:9100" # Prometheus /metrics
+
+volumes:
+  redis-data:

@@ -1,0 +1,75 @@
+# NOTE: this manifest was validated for YAML/schema correctness in this
+# build environment (no live cluster or `kubectl` binary was available to
+# `apply --dry-run=server` against). Validate with
+# `kubectl apply --dry-run=client -f deploy/k8s/` against your own cluster
+# before relying on it in production.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bitscrape-worker
+  labels:
+    app: bitscrape
+    component: worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: bitscrape
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: bitscrape
+        component: worker
+    spec:
+      # Spreads replicas across nodes/zones instead of stacking them,
+      # so a single node/zone failure doesn't take out the whole fleet --
+      # the practical starting point for "multi-region" before you're
+      # actually running separate clusters per region.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: bitscrape
+              component: worker
+      containers:
+        - name: bitscrape
+          image: your-registry/bitscrape:0.4.0
+          imagePullPolicy: IfNotPresent
+          command: ["bitscrape", "crawl", "/app/spiders/my_spider.py"]
+          envFrom:
+            - configMapRef:
+                name: bitscrape-config
+          env:
+            - name: BITSCRAPE_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bitscrape-secrets
+                  key: redis-url
+          ports:
+            - name: stats
+              containerPort: 8765
+            - name: metrics
+              containerPort: 9100
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /stats.json
+              port: stats
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /stats.json
+              port: stats
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3

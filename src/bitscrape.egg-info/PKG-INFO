@@ -1,0 +1,231 @@
+Metadata-Version: 2.4
+Name: bitscrape
+Version: 0.8.0
+Summary: A modern, production-grade async web scraping framework (patched fork: robots.txt, queue-crash, proxy, and infinite-scroll fixes)
+Author: Bitscrape Contributors
+License: MIT License
+        
+        Copyright (c) 2024 Bitscrape Contributors
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/Sudharsansm/Bitscrape
+Project-URL: Repository, https://github.com/Sudharsansm/Bitscrape
+Project-URL: Issues, https://github.com/Sudharsansm/Bitscrape/issues
+Project-URL: Changelog, https://github.com/Sudharsansm/Bitscrape/blob/main/CHANGELOG.md
+Keywords: scraping,crawler,async,pydantic,playwright,spider
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP
+Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
+Classifier: Framework :: AsyncIO
+Classifier: Typing :: Typed
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: aiohttp>=3.9
+Requires-Dist: pydantic>=2.6
+Requires-Dist: pydantic-settings>=2.2
+Requires-Dist: selectolax>=0.3
+Requires-Dist: parsel>=1.9
+Requires-Dist: lxml>=5.0
+Requires-Dist: click>=8.1
+Provides-Extra: playwright
+Requires-Dist: playwright>=1.40; extra == "playwright"
+Provides-Extra: redis
+Requires-Dist: redis>=5.0; extra == "redis"
+Requires-Dist: orjson>=3.9; extra == "redis"
+Provides-Extra: cli
+Requires-Dist: rich>=13.0; extra == "cli"
+Provides-Extra: storage-sqlite
+Requires-Dist: aiosqlite>=0.19; extra == "storage-sqlite"
+Provides-Extra: storage-postgres
+Requires-Dist: asyncpg>=0.29; extra == "storage-postgres"
+Provides-Extra: storage-s3
+Requires-Dist: boto3>=1.34; extra == "storage-s3"
+Provides-Extra: storage-mongo
+Requires-Dist: motor>=3.4; extra == "storage-mongo"
+Provides-Extra: workflow
+Requires-Dist: langgraph>=0.2; extra == "workflow"
+Provides-Extra: monitoring
+Requires-Dist: psutil>=5.9; extra == "monitoring"
+Provides-Extra: knowledge-graph
+Requires-Dist: networkx>=3.2; extra == "knowledge-graph"
+Requires-Dist: numpy>=1.26; extra == "knowledge-graph"
+Requires-Dist: scipy>=1.11; extra == "knowledge-graph"
+Provides-Extra: observability
+Requires-Dist: prometheus-client>=0.20; extra == "observability"
+Requires-Dist: opentelemetry-api>=1.24; extra == "observability"
+Requires-Dist: opentelemetry-sdk>=1.24; extra == "observability"
+Provides-Extra: dev
+Requires-Dist: pytest==9.1.1; extra == "dev"
+Requires-Dist: pytest-asyncio==1.4.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: mypy==2.3.0; extra == "dev"
+Requires-Dist: ruff==0.15.22; extra == "dev"
+Requires-Dist: moto[s3]==5.2.2; extra == "dev"
+Requires-Dist: pyyaml==6.0.3; extra == "dev"
+Requires-Dist: mongomock-motor>=0.0.29; extra == "dev"
+Provides-Extra: all
+Requires-Dist: playwright>=1.40; extra == "all"
+Requires-Dist: redis>=5.0; extra == "all"
+Requires-Dist: orjson>=3.9; extra == "all"
+Requires-Dist: rich>=13.0; extra == "all"
+Requires-Dist: aiosqlite>=0.19; extra == "all"
+Requires-Dist: asyncpg>=0.29; extra == "all"
+Requires-Dist: boto3>=1.34; extra == "all"
+Requires-Dist: motor>=3.4; extra == "all"
+Requires-Dist: langgraph>=0.2; extra == "all"
+Requires-Dist: psutil>=5.9; extra == "all"
+Requires-Dist: networkx>=3.2; extra == "all"
+Requires-Dist: numpy>=1.26; extra == "all"
+Requires-Dist: scipy>=1.11; extra == "all"
+Requires-Dist: prometheus-client>=0.20; extra == "all"
+Requires-Dist: opentelemetry-api>=1.24; extra == "all"
+Requires-Dist: opentelemetry-sdk>=1.24; extra == "all"
+Dynamic: license-file
+
+# Bitscrape
+
+**A modular, async Python web scraping framework — simple for a first
+spider, capable of distributed crawling, storage, search-ranking, and
+observability for everything after that.**
+
+```python
+import bitscrape
+
+@bitscrape.spider(name="quotes", start_urls=["https://example.com"])
+async def parse(response):
+    for quote in response.css("div.quote"):
+        yield {
+            "text": quote.css("span.text::text").get(),
+            "author": quote.css("small.author::text").get(),
+        }
+
+bitscrape.run(parse, output="quotes.jsonl")
+```
+
+That same call scales to a Redis-backed, multi-worker distributed crawl by
+changing one argument — the spider code doesn't change:
+
+```python
+bitscrape.run(parse, settings=bitscrape.Settings(
+    scheduler_use_redis=True,
+    distributed_throttle_enabled=True,
+))
+```
+
+## Why Bitscrape
+
+- **One function call to run a spider**, whether it's a plain decorated
+  function or a full class with multiple callbacks.
+- **One `Settings` object controls everything else** — proxy rotation,
+  session pooling, JS rendering, distributed crawling, live monitoring,
+  Prometheus metrics — all opt-in toggles, nothing extra loads unless you
+  ask for it.
+- **Respects robots.txt and meta-robots by default**, and fails *safe*
+  (blocks) rather than *open* (allows) if robots.txt can't be fetched.
+- **Every documented feature has a real test behind it** — a real local
+  Redis, a real local HTTP server, a real on-disk SQLite database, a real
+  S3 API emulation, real Prometheus/OpenTelemetry libraries. Where
+  something couldn't be verified for real (a live PostgreSQL/MongoDB
+  server, a Kubernetes cluster), that's stated explicitly rather than
+  implied — see [`CHANGELOG.md`](CHANGELOG.md) and
+  [`docs/`](docs/index.md) for exactly what's verified vs. documented.
+
+## What's included
+
+| Area | What you get |
+|---|---|
+| **Crawling** | Async fetching (`aiohttp`), retries with `Retry-After` support, conditional GET, robots.txt + meta-robots compliance, redirect-loop detection |
+| **JS rendering** | Playwright integration, pooled browser reuse, infinite-scroll helper |
+| **Distributed crawling** | Redis-backed queue + dedup filter, cross-worker-process politeness throttle, a Mercator-style priority `Frontier` |
+| **Extraction** | CSS/XPath selectors, URL canonicalization, SimHash near-duplicate detection, heuristic entity resolution |
+| **Search infrastructure** | PageRank/HITS link analysis, incremental recrawl scheduling, BM25 + vector hybrid search with Reciprocal Rank Fusion, a knowledge-graph builder |
+| **Storage** | Pluggable backends — SQLite and S3 fully tested, PostgreSQL implemented, MongoDB/Elasticsearch as documented stubs |
+| **Extensibility** | A plugin/hook system (`PluginManager`), example auth-helper and storage-connector plugins |
+| **Observability** | Real Prometheus metrics, real OpenTelemetry tracing, structured JSON logging, threshold-based alerting, a live local stats dashboard |
+| **Deployment** | Dockerfile, Docker Compose, Kubernetes manifests (Deployment/HPA/Service/PDB) |
+
+**Explicitly not included, by design**: CAPTCHA-solving, browser/TLS
+fingerprint spoofing, or any other bot-detection evasion tooling. See
+[`docs/security/`](docs/security/index.md) for why.
+
+## Install
+
+```bash
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\Activate.ps1
+pip install -e ".[all,dev,cli]"
+bitscrape --version
+```
+
+See [`docs/installation/`](docs/installation/index.md) for extras, system
+requirements, and troubleshooting.
+
+## Quickstart
+
+```bash
+bitscrape genspider quotes example.com
+bitscrape crawl spiders/quotes.py -o quotes.jsonl
+```
+
+Full walkthrough: [`docs/quickstart/`](docs/quickstart/index.md).
+
+## Documentation
+
+Full documentation lives in [`docs/`](docs/index.md):
+
+- [Getting Started](docs/getting-started/index.md) · [Quickstart](docs/quickstart/index.md) · [Tutorials](docs/tutorials/index.md)
+- [User Guide](docs/user-guide/index.md) · [Developer Guide](docs/developer-guide/index.md) · [Architecture](docs/architecture/index.md)
+- [API Reference](docs/api/index.md) · [CLI Reference](docs/cli/index.md)
+- [Plugins](docs/plugins/index.md) · [Browser Rendering](docs/browser/index.md) · [Crawling](docs/crawling/index.md)
+- [Scheduler](docs/scheduler/index.md) · [Parser](docs/parser/index.md) · [Extractors](docs/extractors/index.md)
+- [AI / Search Infra](docs/ai/index.md) · [Storage](docs/storage/index.md) · [Deployment](docs/deployment/index.md)
+- [Security](docs/security/index.md) · [Monitoring](docs/monitoring/index.md) · [Examples](docs/examples/index.md)
+- [Troubleshooting](docs/troubleshooting/index.md) · [FAQ](docs/faq/index.md) · [Roadmap](docs/roadmap/index.md) · [Changelog](docs/changelog/index.md)
+
+Also at the repository root: [`ARCHITECTURE.md`](ARCHITECTURE.md) (condensed
+system design), [`API_REFERENCE.md`](API_REFERENCE.md) (flat single-page API
+reference), [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md).
+
+## Running the test suite
+
+```bash
+pytest -q
+```
+
+Expect `440 passed`. A handful of tests need a local Redis on port 6390 and
+a local PostgreSQL server (database `bitscrape_test`, user/password
+`postgres`/`postgres`) —
+if it's not running, only those specific tests fail, everything else still
+passes. See [`docs/developer-guide/`](docs/developer-guide/index.md).
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Security issues: see
+[`SECURITY.md`](SECURITY.md) rather than a public issue. Community
+standards: [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).

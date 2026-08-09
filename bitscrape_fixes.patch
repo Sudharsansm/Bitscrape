@@ -1,0 +1,2137 @@
+diff -ru original/bitscrape/__init__.py /home/claude/bitscrape_work/src/bitscrape/__init__.py
+--- original/bitscrape/__init__.py	2026-07-21 19:00:56.161842464 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/__init__.py	2026-07-27 10:40:31.358888014 +0000
+@@ -1,7 +1,17 @@
+ """
+ Bitscrape — modern async web scraping framework.
+ 
+-Everything you need is available from a single import:
++The fastest possible start (function-based spider, one import, one call):
++
++    import bitscrape
++
++    @bitscrape.spider(name="myspider", start_urls=["https://example.com"])
++    async def parse(response):
++        yield {"title": response.css("h1::text").get()}
++
++    bitscrape.run(parse, output="data.jsonl")
++
++Or a full class-based spider when you need more than one callback:
+ 
+     import bitscrape
+ 
+@@ -17,14 +27,26 @@
+ 
+     bitscrape.run(MySpider)
+ 
+-Or with destructured imports (Scrapy-style):
++Both paths go through ``build_engine()`` internally, so every feature
++driven by ``Settings`` — distributed crawling (Redis), proxy rotation,
++session pooling, robots.txt/meta-robots handling, live monitoring,
++Prometheus metrics — is available automatically without extra wiring:
++
++    stats = bitscrape.run(
++        MySpider,
++        settings=bitscrape.Settings(
++            scheduler_use_redis=True,
++            distributed_throttle_enabled=True,
++            monitoring_enabled=True,
++        ),
++    )
+ 
+-    from bitscrape import Spider, Item, Field, run
+-    from bitscrape import Request, Response, Settings
+-    from bitscrape import Engine, FormRequest
+-    from bitscrape import LoggingPipeline, ValidationPipeline, DedupPipeline, PostgresPipeline
+-    from bitscrape import JSONLExporter, JSONExporter, CSVExporter, XMLExporter
+-    from bitscrape import UserAgentMiddleware, RobotsMiddleware, CookieMiddleware
++Everything else in the ecosystem (link analysis/PageRank, incremental
++recrawl scheduling, URL canonicalization, hybrid BM25+vector search, entity
++resolution, knowledge graphs, storage backends, the plugin system) is also
++available from this single import — see each module's own docstring
++(``bitscrape.link_analysis``, ``bitscrape.ranking``, etc.) for details, or
++the top-level ``README.md`` / ``CHANGELOG.md`` for a full feature tour.
+ """
+ 
+ from __future__ import annotations
+@@ -58,11 +80,81 @@
+ from bitscrape.middleware.middleware import (
+     BaseMiddleware,
+     CookieMiddleware,
++    DistributedThrottleMiddleware,
++    MetaRobotsMiddleware,
+     MiddlewareManager,
++    ProxyMiddleware,
+     RobotsMiddleware,
++    SessionPoolMiddleware,
+     UserAgentMiddleware,
+ )
+ 
++# ── Factory: one call to build a fully-wired Engine from Settings ─────────
++from bitscrape.factory import build_engine, build_middlewares
++
++# ── URL Frontier ───────────────────────────────────────────────────────────
++from bitscrape.frontier import Frontier
++
++# ── Link analysis (PageRank / HITS) ────────────────────────────────────────
++from bitscrape.link_analysis import LinkGraph
++
++# ── Incremental recrawling ─────────────────────────────────────────────────
++from bitscrape.recrawl import PageHistory, RecrawlScheduler
++
++# ── Canonicalization / dedup ───────────────────────────────────────────────
++from bitscrape.canonicalize import (
++    ContentFingerprint,
++    RedirectLoopError,
++    canonicalize_url,
++    compute_fingerprint,
++    is_near_duplicate,
++    resolve_redirect_chain,
++)
++
++# ── Semantic ranking (BM25 + vectors + fusion) ─────────────────────────────
++from bitscrape.ranking import (
++    BM25Index,
++    HybridSearcher,
++    HybridSearchResult,
++    VectorIndex,
++    reciprocal_rank_fusion,
++)
++
++# ── Entity resolution ──────────────────────────────────────────────────────
++from bitscrape.entity_resolution import EntityResolver, similarity
++
++# ── Knowledge graph ─────────────────────────────────────────────────────────
++from bitscrape.knowledge_graph import KnowledgeGraph, extract_entities
++
++# ── Observability: metrics, tracing, structured logging, alerting ─────────
++from bitscrape.observability import (
++    AlertManager,
++    CrawlMetrics,
++    CrawlTracer,
++    JSONLogFormatter,
++)
++
++# ── Live monitoring dashboard (local JSON/HTML stats feed) ─────────────────
++from bitscrape.monitoring import StatsMonitor
++
++# ── Plugin system ──────────────────────────────────────────────────────────
++from bitscrape.plugins import (
++    BasePlugin,
++    BearerTokenAuthPlugin,
++    PluginManager,
++    StorageConnectorPlugin,
++)
++
++# ── Storage backends (SQLite/S3 fully supported; Postgres implemented but
++#    unverified against a live server; Mongo/Elasticsearch are documented
++#    stubs — see bitscrape.storage.backends for the exact status of each) ──
++from bitscrape.storage.backends import (
++    BaseStorageBackend,
++    PostgresStorageBackend,
++    S3StorageBackend,
++    SQLiteStorageBackend,
++)
++
+ # ── Parser / selectors ─────────────────────────────────────────────────────
+ from bitscrape.parser.selector import NodeSelector, ParsedResponse, SelectorList
+ 
+@@ -116,6 +208,59 @@
+             object.__setattr__(self, "headers", headers)
+ 
+ 
++# ── Function-based spiders: the simplest possible entry point ──────────────
++
++
++def spider(
++    name: str, start_urls: list[str] | None = None, **class_attrs: Any
++) -> Any:
++    """
++    Turns a plain async generator function into a full ``Spider`` class --
++    the simplest possible way to define a spider when you don't need
++    multiple callbacks or spider-level state.
++
++    Usage::
++
++        import bitscrape
++
++        @bitscrape.spider(name="quotes", start_urls=["https://example.com"])
++        async def parse(response):
++            for q in response.css("div.quote"):
++                yield {"text": q.css("span.text::text").get()}
++
++        stats = bitscrape.run(parse)  # `parse` is now a Spider subclass
++
++    The decorated function's signature is ``async def parse(response)`` --
++    no ``self`` needed, since a function-based spider carries no instance
++    state beyond what ``Settings``/``class_attrs`` provide. Extra keyword
++    arguments (e.g. ``custom_settings={...}``) are set as class attributes,
++    the same as they would be on a full ``class MySpider(Spider):`` body.
++
++    For anything needing multiple callbacks, ``self.follow()``, or spider
++    state across requests, define a full ``Spider`` subclass instead --
++    this decorator is deliberately for the common simple case.
++    """
++
++    def decorator(func: Any) -> type[Spider]:
++        async def _parse_method(self: Spider, response: Any) -> Any:
++            async for item in func(response):
++                yield item
++
++        attrs: dict[str, Any] = {
++            "name": name,
++            "start_urls": list(start_urls or []),
++            "parse": _parse_method,
++            **class_attrs,
++        }
++        cls_name = (
++            "".join(part.capitalize() for part in name.replace("-", "_").split("_"))
++            + "Spider"
++        )
++        return type(cls_name, (Spider,), attrs)
++
++    return decorator
++
++
+ # ── Top-level ``run()`` helper ─────────────────────────────────────────────
+ 
+ 
+@@ -146,13 +291,22 @@
+         stats = bitscrape.run(MySpider, output="data.jsonl")
+         print(f"Scraped {stats.items_scraped} items")
+ 
++    Internally delegates to ``bitscrape.factory.build_engine()`` — the same
++    function the CLI uses — so this one-liner gets every feature driven by
++    ``Settings`` (meta-robots handling, distributed throttling, live
++    monitoring, proxy rotation, etc.) automatically, rather than a separate,
++    simplified wiring path that could silently drift out of sync with it.
++    Pass ``middlewares`` explicitly only if you need to override the
++    automatic selection.
++
+     Args:
+         spider_cls:  Your Spider subclass (not an instance).
+         output:      File path to write results to (e.g. "data.jsonl", "data.csv").
+         fmt:         Export format — "jsonl" | "json" | "csv" | "xml".
+         settings:    Optional Settings instance (uses defaults if omitted).
+         pipelines:   Optional list of pipeline instances.
+-        middlewares: Optional list of middleware instances.
++        middlewares: Optional list of middleware instances (overrides the
++                     automatic Settings-driven selection if provided).
+         log_level:   Logging level string (default "INFO").
+     """
+     logging.basicConfig(
+@@ -161,35 +315,47 @@
+         datefmt="%H:%M:%S",
+     )
+ 
++    from bitscrape.factory import build_engine
++
+     cfg = settings or Settings()
+     spider = spider_cls(settings=cfg)
+-
+     exporter = get_exporter(fmt, output) if output else None
+ 
+-    mws: list[BaseMiddleware] = middlewares or [
+-        UserAgentMiddleware(),
+-        CookieMiddleware(),
+-    ]
+-    if cfg.robotstxt_obey:
+-        mws.insert(0, RobotsMiddleware())
+-
+-    engine = Engine(
+-        spider=spider,
+-        settings=cfg,
+-        pipelines=pipelines or [],
+-        middlewares=mws,
+-        exporter=exporter,
+-    )
++    async def _build_and_run() -> CrawlStats:
++        engine = await build_engine(
++            spider,
++            cfg,
++            exporter=exporter,
++        )
++        if middlewares is not None:
++            engine._middleware_manager = MiddlewareManager(middlewares)
++        if pipelines:
++            engine._pipeline_manager = PipelineManager(pipelines)
++        return await engine.run()
+ 
+-    return asyncio.run(engine.run())
++    return asyncio.run(_build_and_run())
+ 
+ 
+ # ── Version ────────────────────────────────────────────────────────────────
+-__version__ = "0.1.0"
++def _resolve_version() -> str:
++    """Reads the real installed distribution version instead of a hardcoded
++    string that goes stale the moment the package is bumped (the exact bug
++    fixed in the CLI's --version flag in an earlier release)."""
++    from importlib.metadata import PackageNotFoundError
++    from importlib.metadata import version as _pkg_version
++
++    try:
++        return _pkg_version("bitscrape")
++    except PackageNotFoundError:
++        return "0.0.0+unknown"
++
++
++__version__ = _resolve_version()
+ 
+ __all__ = [
+     # Core
+     "Spider",
++    "spider",
+     "Item",
+     "BaseItem",
+     "Field",
+@@ -198,9 +364,11 @@
+     "Response",
+     "CrawlStats",
+     "Settings",
+-    # Engine & runner
++    # Engine, runner & factory
+     "Engine",
+     "run",
++    "build_engine",
++    "build_middlewares",
+     # Parser
+     "ParsedResponse",
+     "SelectorList",
+@@ -224,10 +392,57 @@
+     "BaseMiddleware",
+     "UserAgentMiddleware",
+     "RobotsMiddleware",
++    "MetaRobotsMiddleware",
+     "CookieMiddleware",
++    "SessionPoolMiddleware",
++    "ProxyMiddleware",
++    "DistributedThrottleMiddleware",
+     "MiddlewareManager",
+     # Scheduler
+     "Scheduler",
+     "MemoryQueue",
+     "RedisQueue",
++    # URL Frontier
++    "Frontier",
++    # Link analysis
++    "LinkGraph",
++    # Incremental recrawling
++    "RecrawlScheduler",
++    "PageHistory",
++    # Canonicalization / dedup
++    "canonicalize_url",
++    "resolve_redirect_chain",
++    "compute_fingerprint",
++    "is_near_duplicate",
++    "ContentFingerprint",
++    "RedirectLoopError",
++    # Semantic ranking
++    "BM25Index",
++    "VectorIndex",
++    "HybridSearcher",
++    "HybridSearchResult",
++    "reciprocal_rank_fusion",
++    # Entity resolution
++    "EntityResolver",
++    "similarity",
++    # Knowledge graph
++    "KnowledgeGraph",
++    "extract_entities",
++    # Observability
++    "CrawlMetrics",
++    "CrawlTracer",
++    "JSONLogFormatter",
++    "AlertManager",
++    # Monitoring
++    "StatsMonitor",
++    # Plugins
++    "PluginManager",
++    "BasePlugin",
++    "BearerTokenAuthPlugin",
++    "StorageConnectorPlugin",
++    # Storage backends
++    "BaseStorageBackend",
++    "SQLiteStorageBackend",
++    "S3StorageBackend",
++    "PostgresStorageBackend",
+ ]
+Only in /home/claude/bitscrape_work/src/bitscrape: canonicalize.py
+diff -ru original/bitscrape/cli/main.py /home/claude/bitscrape_work/src/bitscrape/cli/main.py
+--- original/bitscrape/cli/main.py	2026-07-21 19:00:56.162501122 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/cli/main.py	2026-07-27 10:40:31.375660423 +0000
+@@ -16,6 +16,8 @@
+ import importlib.util
+ import logging
+ import sys
++from importlib.metadata import PackageNotFoundError
++from importlib.metadata import version as _pkg_version
+ from pathlib import Path
+ from typing import Any
+ 
+@@ -28,6 +30,18 @@
+ console = Console()
+ 
+ 
++def _installed_version() -> str:
++    """
++    Resolve the installed package version dynamically instead of a hardcoded
++    string, which previously went stale the moment the package was bumped
++    (e.g. `--version` reported "0.1.0" even after installing 0.2.0).
++    """
++    try:
++        return _pkg_version("bitscrape")
++    except PackageNotFoundError:
++        return "0.0.0+unknown"
++
++
+ def _setup_logging(level: str) -> None:
+     logging.basicConfig(
+         level=getattr(logging, level.upper(), logging.INFO),
+@@ -43,7 +57,7 @@
+ 
+ 
+ @click.group()
+-@click.version_option("0.1.0", prog_name="bitscrape")
++@click.version_option(_installed_version(), prog_name="bitscrape")
+ def cli() -> None:
+     """⚡ Bitscrape — modern async web scraping framework."""
+ 
+@@ -95,13 +109,8 @@
+         sys.exit(1)
+ 
+     from bitscrape.core.settings import Settings
+-    from bitscrape.engine import Engine
+     from bitscrape.exporters.feed import get_exporter
+-    from bitscrape.middleware.middleware import (
+-        CookieMiddleware,
+-        RobotsMiddleware,
+-        UserAgentMiddleware,
+-    )
++    from bitscrape.factory import build_engine
+ 
+     overrides: dict[str, Any] = {}
+     if no_robots:
+@@ -114,16 +123,9 @@
+ 
+     exporter = get_exporter(fmt, output) if output else get_exporter(fmt, None)
+ 
+-    middlewares = [UserAgentMiddleware(), CookieMiddleware()]
+-    if settings.robotstxt_obey:
+-        middlewares.insert(0, RobotsMiddleware())
+-
+-    engine = Engine(
+-        spider=spider,
+-        settings=settings,
+-        middlewares=middlewares,
+-        exporter=exporter,
+-    )
++    async def _build_and_run():
++        engine = await build_engine(spider, settings, exporter=exporter)
++        return engine, await engine.run()
+ 
+     console.print(
+         Panel(
+@@ -133,7 +135,7 @@
+     )
+ 
+     try:
+-        stats = asyncio.run(engine.run())
++        engine, stats = asyncio.run(_build_and_run())
+     except KeyboardInterrupt:
+         console.print("\n[yellow]Interrupted by user[/yellow]")
+         sys.exit(0)
+@@ -146,6 +148,8 @@
+     t.add_row("Failed", str(stats.requests_failed))
+     t.add_row("Items scraped", str(stats.items_scraped))
+     t.add_row("Items dropped", str(stats.items_dropped))
++    t.add_row("Items noindexed", str(stats.items_noindexed))
++    t.add_row("Links nofollow-skipped", str(stats.links_nofollow_skipped))
+     t.add_row("Downloaded", f"{stats.bytes_downloaded / 1024:.1f} kB")
+     t.add_row("Elapsed", f"{stats.elapsed:.2f}s")
+     t.add_row("RPS", f"{stats.rps:.1f}")
+@@ -245,7 +249,7 @@
+         if spec is None or spec.loader is None:
+             return None
+         mod = importlib.util.module_from_spec(spec)
+-        spec.loader.exec_module(mod)  # type: ignore[union-attr]
++        spec.loader.exec_module(mod)
+     else:
+         mod = importlib.import_module(path_or_module)
+ 
+diff -ru original/bitscrape/core/models.py /home/claude/bitscrape_work/src/bitscrape/core/models.py
+--- original/bitscrape/core/models.py	2026-07-21 19:00:56.162697272 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/core/models.py	2026-07-27 10:40:31.381186179 +0000
+@@ -91,6 +91,8 @@
+     responses_received: int = 0
+     items_scraped: int = 0
+     items_dropped: int = 0
++    items_noindexed: int = 0  # skipped due to meta-robots noindex
++    links_nofollow_skipped: int = 0  # links not enqueued due to meta-robots nofollow
+     bytes_downloaded: int = 0
+     start_time: float = Field(default_factory=time.time)
+     finish_time: float | None = None
+diff -ru original/bitscrape/core/settings.py /home/claude/bitscrape_work/src/bitscrape/core/settings.py
+--- original/bitscrape/core/settings.py	2026-07-21 19:00:56.162756298 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/core/settings.py	2026-07-27 10:40:31.380680059 +0000
+@@ -27,11 +27,15 @@
+     redis_url: str = "redis://localhost:6379/0"
+     dupefilter_enabled: bool = True
+     max_depth: int | None = None  # None = unlimited
++    queue_max_size: int = Field(
++        0, ge=0
++    )  # 0 = unbounded (previous behaviour); >0 caps MemoryQueue for backpressure
+ 
+     # --- Playwright ----------------------------------------------------------
+     playwright_headless: bool = True
+     playwright_browser: str = "chromium"
+     playwright_pool_size: int = 2
++    playwright_pool_enabled: bool = False
+ 
+     # --- Storage -------------------------------------------------------------
+     database_url: str | None = None  # asyncpg DSN
+@@ -49,6 +53,54 @@
+     # --- Robots.txt ----------------------------------------------------------
+     robotstxt_obey: bool = True
+ 
++    # --- Page-level indexing directives (meta robots / X-Robots-Tag) --------
++    # Mirrors what Googlebot/ClaudeBot/PerplexityBot honour beyond robots.txt:
++    # a page can say "you may fetch me, but don't index me" (noindex) or
++    # "don't pass link-equity / don't follow links found here" (nofollow).
++    respect_meta_robots: bool = True
++
++    # --- Conditional GET (ETag / Last-Modified) ------------------------------
++    # Avoids re-downloading unchanged pages on repeat crawls, same as
++    # production search-engine crawlers do to reduce load on crawled sites.
++    conditional_get_enabled: bool = True
++
++    # --- Retry-After handling -------------------------------------------------
++    # Honour a server's own requested backoff (RFC 9110 Retry-After) instead
++    # of blindly using exponential backoff on 429/503.
++    respect_retry_after: bool = True
++    max_retry_after_seconds: float = Field(120.0, ge=0.0)
++
++    # --- Distributed rate limiting -------------------------------------------
++    # A Redis-backed per-domain lease so multiple worker processes sharing
++    # the same Redis don't independently hammer the same domain -- each
++    # worker still crawls concurrently, but requests to any one domain are
++    # spaced out cluster-wide, not just within a single process.
++    distributed_throttle_enabled: bool = False
++
++    # --- Auto-throttle --------------------------------------------------------
++    # Adaptive, latency-based per-domain delay: back off when responses get
++    # slow, speed back up as they recover. Local to this process (doesn't
++    # need Redis) -- combine with distributed_throttle_enabled for
++    # multi-worker deployments.
++    autothrottle_enabled: bool = False
++    autothrottle_start_delay: float = Field(1.0, ge=0.0)
++    autothrottle_max_delay: float = Field(60.0, ge=0.0)
++    autothrottle_target_concurrency: float = Field(2.0, gt=0.0)
++
++    # --- Session pooling ------------------------------------------------------
++    session_pool_size: int = Field(1, ge=1)
++    session_rotate_every: int = Field(0, ge=0)  # 0 = never auto-rotate
++
++    # --- Proxy rotation (used by build_engine() in bitscrape.factory) --------
++    proxies: list[str] = Field(default_factory=list)
++    proxy_rotate: bool = True
++
++    # --- Monitoring / metrics (used by build_engine()) ------------------------
++    monitoring_enabled: bool = False
++    monitoring_port: int = 8765
++    metrics_enabled: bool = False
++    metrics_port: int = 9100
++
+     model_config = SettingsConfigDict(
+         env_prefix="BITSCRAPE_",
+         env_file=".env",
+diff -ru original/bitscrape/core/spider.py /home/claude/bitscrape_work/src/bitscrape/core/spider.py
+--- original/bitscrape/core/spider.py	2026-07-21 19:00:56.162825504 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/core/spider.py	2026-07-28 03:21:50.346805421 +0000
+@@ -6,7 +6,9 @@
+ 
+ import logging
+ from collections.abc import AsyncGenerator
++from contextvars import ContextVar
+ from typing import Any
++from urllib.parse import urljoin, urlparse
+ 
+ from bitscrape.core.models import BaseItem, Request, Response
+ from bitscrape.core.settings import Settings
+@@ -16,6 +18,25 @@
+ # A spider callback can yield Requests or Items (or dicts)
+ SpiderOutput = AsyncGenerator[Request | BaseItem | dict[str, Any], None]
+ 
++# The response currently being parsed, so follow() can resolve relative
++# URLs against it. A ContextVar (not a plain instance attribute) because
++# the Engine processes multiple requests CONCURRENTLY via
++# asyncio.create_task() against one shared Spider instance -- a plain
++# `self._current_response = response` attribute would let two in-flight
++# requests clobber each other's resolution context at an await point
++# inside the callback. asyncio.create_task() copies the current context
++# per task, so a ContextVar set within one task's execution is correctly
++# isolated from sibling tasks processing other requests concurrently.
++_current_response_var: ContextVar[Response | None] = ContextVar(
++    "bitscrape_current_response", default=None
++)
++
++
++def _is_absolute_url(url: str) -> bool:
++    """True if `url` already has a scheme (http://, https://, etc.) --
++    i.e. doesn't need resolving against a base URL."""
++    return bool(urlparse(url).scheme)
++
+ 
+ class Spider:
+     """
+@@ -79,9 +100,26 @@
+         meta: dict[str, Any] | None = None,
+         use_playwright: bool = False,
+     ) -> Request:
+-        """Convenience: create a follow-up Request."""
++        """
++        Convenience: create a follow-up Request.
++
++        If ``url`` is relative (no scheme, e.g. ``"/page/2"`` or
++        ``"page/2"``) and this is called from within a callback (the
++        Engine sets the current response via a context variable for the
++        duration of each callback invocation), it's resolved against the
++        current response's URL via ``urljoin`` -- so
++        ``self.follow(response.css("a::attr(href)").get())`` works whether
++        the extracted href is absolute or relative, matching what most
++        spider authors expect. Called outside a callback (no current
++        response, e.g. while building seed requests), a relative URL is
++        passed through unresolved -- there's no page to resolve it against.
++        """
++        resolved_url = url
++        current_response = _current_response_var.get()
++        if current_response is not None and not _is_absolute_url(url):
++            resolved_url = urljoin(current_response.url, url)
+         return Request(
+-            url=url,
++            url=resolved_url,
+             callback=callback,
+             meta=meta or {},
+             use_playwright=use_playwright,
+@@ -91,7 +129,7 @@
+     # Default parse — must be overridden
+     # ------------------------------------------------------------------
+ 
+-    async def parse(self, response: Response) -> SpiderOutput:  # type: ignore[return]
++    async def parse(self, response: Response) -> SpiderOutput:
+         raise NotImplementedError(f"Spider {self.name!r} must implement an async `parse` method")
+ 
+     # ------------------------------------------------------------------
+diff -ru original/bitscrape/downloader/downloader.py /home/claude/bitscrape_work/src/bitscrape/downloader/downloader.py
+--- original/bitscrape/downloader/downloader.py	2026-07-21 19:00:56.165831927 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/downloader/downloader.py	2026-07-27 10:40:31.303659721 +0000
+@@ -13,6 +13,7 @@
+ import logging
+ import time
+ from collections import defaultdict
++from typing import Any
+ 
+ import aiohttp
+ 
+@@ -22,10 +23,193 @@
+ logger = logging.getLogger(__name__)
+ 
+ 
++class AutoThrottle:
++    """
++    Adaptive, latency-based per-domain delay -- the same idea as Scrapy's
++    AUTOTHROTTLE: back off when a domain's responses get slow (it's under
++    load, or rate-limiting us), speed back up as they recover, targeting a
++    roughly constant number of requests in flight per domain rather than a
++    fixed delay that's either too cautious on a fast day or too aggressive
++    on a slow one.
++
++    Algorithm: after each response, compute
++        target_delay = latency_seconds / target_concurrency
++    and move the domain's current delay halfway toward it:
++        new_delay = (current_delay + target_delay) / 2
++    clamped to [0, max_delay]. Starts every domain at ``start_delay``.
++    """
++
++    def __init__(
++        self,
++        start_delay: float = 1.0,
++        max_delay: float = 60.0,
++        target_concurrency: float = 2.0,
++    ) -> None:
++        self._start_delay = max(0.0, start_delay)
++        self._max_delay = max(0.0, max_delay)
++        self._target_concurrency = max(1e-6, target_concurrency)
++        self._delays: dict[str, float] = {}
++
++    def get_delay(self, domain: str) -> float:
++        return self._delays.get(domain, self._start_delay)
++
++    def update(self, domain: str, latency_seconds: float) -> None:
++        target_delay = max(0.0, latency_seconds) / self._target_concurrency
++        current = self._delays.get(domain, self._start_delay)
++        new_delay = (current + target_delay) / 2
++        self._delays[domain] = min(max(new_delay, 0.0), self._max_delay)
++
++    def reset(self, domain: str | None = None) -> None:
++        if domain is None:
++            self._delays.clear()
++        else:
++            self._delays.pop(domain, None)
++
++
++class BrowserPool:
++    """
++    Reuses ``pool_size`` Playwright browser instances across requests instead
++    of launching a fresh browser for every fetch. Launching a browser process
++    is by far the most expensive part of the Playwright path (typically
++    1-3+ seconds); a new browser CONTEXT (cheap, isolated cookies/storage
++    per request) is still created per request so requests don't leak
++    cookies/state into each other -- only the underlying browser PROCESS is
++    shared and reused.
++
++    Usage:
++        pool = BrowserPool(playwright_browser="chromium", headless=True, pool_size=2)
++        await pool.start()
++        async with pool.acquire_context(proxy=..., user_agent=...) as context:
++            page = await context.new_page()
++            ...
++        await pool.stop()
++    """
++
++    def __init__(self, playwright_browser: str, headless: bool, pool_size: int) -> None:
++        self._browser_type_name = playwright_browser
++        self._headless = headless
++        self._pool_size = max(1, pool_size)
++        self._playwright: Any = None
++        self._browsers: asyncio.Queue[Any] = asyncio.Queue()
++        self._all_browsers: list[Any] = []
++        self._started = False
++
++    async def start(self) -> None:
++        if self._started:
++            return
++        from playwright.async_api import async_playwright
++
++        self._playwright = await async_playwright().start()
++        browser_type = getattr(self._playwright, self._browser_type_name)
++        for _ in range(self._pool_size):
++            browser = await browser_type.launch(headless=self._headless)
++            self._all_browsers.append(browser)
++            await self._browsers.put(browser)
++        self._started = True
++        logger.info(
++            "BrowserPool started: %d %s instance(s)", self._pool_size, self._browser_type_name
++        )
++
++    async def stop(self) -> None:
++        if not self._started:
++            return
++        for browser in self._all_browsers:
++            await browser.close()
++        if self._playwright is not None:
++            await self._playwright.stop()
++        self._all_browsers.clear()
++        self._started = False
++        logger.info("BrowserPool stopped")
++
++    async def _acquire_browser(self) -> Any:
++        return await self._browsers.get()
++
++    async def _release_browser(self, browser: Any) -> None:
++        await self._browsers.put(browser)
++
++    def acquire_context(
++        self, proxy: dict[str, str] | None = None, **context_kwargs: Any
++    ) -> _PooledContext:
++        return _PooledContext(self, proxy=proxy, **context_kwargs)
++
++    @property
++    def size(self) -> int:
++        return self._pool_size
++
++    @property
++    def available(self) -> int:
++        return self._browsers.qsize()
++
++
++class _PooledContext:
++    """Async context manager: checks out a pooled browser, yields a fresh
++    BrowserContext on it, closes only the context (not the browser) on
++    exit, and returns the browser to the pool."""
++
++    def __init__(self, pool: BrowserPool, proxy: dict[str, str] | None, **context_kwargs: Any) -> None:
++        self._pool = pool
++        self._proxy = proxy
++        self._context_kwargs = context_kwargs
++        self._browser: Any = None
++        self._context: Any = None
++
++    async def __aenter__(self) -> Any:
++        self._browser = await self._pool._acquire_browser()
++        kwargs = dict(self._context_kwargs)
++        if self._proxy:
++            kwargs["proxy"] = self._proxy
++        self._context = await self._browser.new_context(**kwargs)
++        return self._context
++
++    async def __aexit__(self, *exc: object) -> None:
++        if self._context is not None:
++            await self._context.close()
++        if self._browser is not None:
++            await self._pool._release_browser(self._browser)
++
++
+ class DownloadError(Exception):
+     """Raised when all retries are exhausted or an unrecoverable error occurs."""
+ 
+ 
++class _RetryableStatus(Exception):
++    """Internal signal: response status is in retry_http_codes."""
++
++    def __init__(self, status: int, retry_after: float | None) -> None:
++        self.status = status
++        self.retry_after = retry_after
++        super().__init__(f"HTTP {status}")
++
++
++def _parse_retry_after(value: str | None) -> float | None:
++    """
++    Parse a Retry-After header per RFC 9110: either an integer number of
++    seconds, or an HTTP-date. Returns None if absent or unparseable.
++    """
++    if not value:
++        return None
++    value = value.strip()
++    try:
++        seconds = float(value)
++        return max(0.0, seconds)
++    except ValueError:
++        pass
++    try:
++        from email.utils import parsedate_to_datetime
++
++        target = parsedate_to_datetime(value)
++        if target.tzinfo is None:
++            from datetime import UTC
++
++            target = target.replace(tzinfo=UTC)
++        from datetime import UTC, datetime
++
++        delta = (target - datetime.now(UTC)).total_seconds()
++        return max(0.0, delta)
++    except (ValueError, TypeError):
++        return None
++
++
+ class Downloader:
+     """
+     Manages a pool of aiohttp sessions and controls concurrency.
+@@ -41,6 +225,29 @@
+         )
+         self._global_semaphore = asyncio.Semaphore(settings.concurrent_requests)
+         self._last_request_time: dict[str, float] = {}
++        # Conditional GET cache: url -> {"etag", "last_modified", "body",
++        # "headers", "status"}. Lets repeat crawls send If-None-Match /
++        # If-Modified-Since and skip re-downloading unchanged pages, the same
++        # courtesy production crawlers extend to reduce load on crawled sites.
++        self._page_cache: dict[str, dict[str, Any]] = {}
++        self._autothrottle = (
++            AutoThrottle(
++                start_delay=settings.autothrottle_start_delay,
++                max_delay=settings.autothrottle_max_delay,
++                target_concurrency=settings.autothrottle_target_concurrency,
++            )
++            if settings.autothrottle_enabled
++            else None
++        )
++        self._browser_pool: BrowserPool | None = (
++            BrowserPool(
++                playwright_browser=settings.playwright_browser,
++                headless=settings.playwright_headless,
++                pool_size=settings.playwright_pool_size,
++            )
++            if settings.playwright_pool_enabled
++            else None
++        )
+ 
+     async def open(self) -> None:
+         connector = aiohttp.TCPConnector(
+@@ -54,12 +261,16 @@
+             timeout=timeout,
+             headers={"User-Agent": self.settings.user_agent},
+         )
++        if self._browser_pool is not None:
++            await self._browser_pool.start()
+         logger.info("Downloader opened (max_concurrent=%d)", self.settings.concurrent_requests)
+ 
+     async def close(self) -> None:
+         if self._session:
+             await self._session.close()
+             self._session = None
++        if self._browser_pool is not None:
++            await self._browser_pool.stop()
+         logger.info("Downloader closed")
+ 
+     # ------------------------------------------------------------------
+@@ -92,19 +303,52 @@
+         t0 = time.monotonic()
+         attempt = 0
+         last_exc: Exception | None = None
++        domain = _domain(request.url)
++
++        conditional_headers: dict[str, str] = {}
++        cached = self._page_cache.get(request.url)
++        if cached and self.settings.conditional_get_enabled:
++            if cached.get("etag"):
++                conditional_headers["If-None-Match"] = cached["etag"]
++            if cached.get("last_modified"):
++                conditional_headers["If-Modified-Since"] = cached["last_modified"]
+ 
+         while attempt <= request.max_retries:
+             try:
+                 async with self._session.request(
+                     method=request.method,
+                     url=request.url,
+-                    headers=request.headers,
++                    headers={**request.headers, **conditional_headers},
+                     data=request.body,
+                     allow_redirects=self.settings.follow_redirects,
+                     max_redirects=self.settings.max_redirect_count,
++                    proxy=request.meta.get("proxy"),
+                 ) as resp:
+-                    body = await resp.read()
+                     elapsed = (time.monotonic() - t0) * 1000
++
++                    if resp.status == 304 and cached and self.settings.conditional_get_enabled:
++                        # Not modified since our last crawl: serve the cached
++                        # body instead of a (near-)empty 304 payload, so the
++                        # spider sees the same content transparently, while
++                        # the origin server only had to send headers.
++                        logger.debug(
++                            "GET %s → 304 Not Modified (served from cache, %.0fms)",
++                            request.url,
++                            elapsed,
++                        )
++                        if self._autothrottle:
++                            self._autothrottle.update(domain, elapsed / 1000)
++                        return Response(
++                            url=str(resp.url),
++                            status=200,
++                            headers={**cached["headers"], "X-Bitscrape-Not-Modified": "true"},
++                            body=cached["body"],
++                            request=request,
++                            elapsed_ms=elapsed,
++                            encoding=cached.get("encoding", "utf-8"),
++                        )
++
++                    body = await resp.read()
+                     response = Response(
+                         url=str(resp.url),
+                         status=resp.status,
+@@ -115,21 +359,54 @@
+                         encoding=resp.charset or "utf-8",
+                     )
+                     if resp.status in self.settings.retry_http_codes:
+-                        raise aiohttp.ClientResponseError(
+-                            resp.request_info,
+-                            resp.history,
+-                            status=resp.status,
+-                        )
++                        retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
++                        raise _RetryableStatus(resp.status, retry_after)
++
++                    if (
++                        resp.status == 200
++                        and self.settings.conditional_get_enabled
++                        and (resp.headers.get("ETag") or resp.headers.get("Last-Modified"))
++                    ):
++                        self._page_cache[request.url] = {
++                            "etag": resp.headers.get("ETag"),
++                            "last_modified": resp.headers.get("Last-Modified"),
++                            "body": body,
++                            "headers": dict(resp.headers),
++                            "encoding": resp.charset or "utf-8",
++                        }
++
+                     logger.debug("GET %s → %d (%.0fms)", request.url, resp.status, elapsed)
++                    if self._autothrottle:
++                        self._autothrottle.update(domain, elapsed / 1000)
+                     return response
+ 
++            except _RetryableStatus as exc:
++                attempt += 1
++                last_exc = exc
++                if attempt <= request.max_retries:
++                    wait = self._backoff_seconds(attempt, exc.retry_after)
++                    reason = (
++                        f"HTTP {exc.status}, server requested {exc.retry_after:.0f}s"
++                        if exc.retry_after is not None
++                        else f"HTTP {exc.status}"
++                    )
++                    logger.warning(
++                        "Retry %d/%d for %s (%s) — waiting %.0fs",
++                        attempt,
++                        request.max_retries,
++                        request.url,
++                        reason,
++                        wait,
++                    )
++                    await asyncio.sleep(wait)
++
+             except (TimeoutError, aiohttp.ClientError) as exc:
+                 attempt += 1
+                 last_exc = exc
+                 if attempt <= request.max_retries:
+-                    wait = min(2**attempt, 30)
++                    wait = self._backoff_seconds(attempt, None)
+                     logger.warning(
+-                        "Retry %d/%d for %s (%s) — waiting %ds",
++                        "Retry %d/%d for %s (%s) — waiting %.0fs",
+                         attempt,
+                         request.max_retries,
+                         request.url,
+@@ -142,11 +419,75 @@
+             f"All {request.max_retries} retries failed for {request.url}"
+         ) from last_exc
+ 
++    def _backoff_seconds(self, attempt: int, retry_after: float | None) -> float:
++        """
++        Prefer the server's own requested backoff (Retry-After) when present
++        and enabled; otherwise fall back to capped exponential backoff.
++        """
++        if (
++            retry_after is not None
++            and self.settings.respect_retry_after
++            and retry_after >= 0
++        ):
++            return min(retry_after, self.settings.max_retry_after_seconds)
++        return min(2**attempt, 30)
++
+     # ------------------------------------------------------------------
+     # Playwright fetch
+     # ------------------------------------------------------------------
+ 
+     async def _fetch_playwright(self, request: Request) -> Response:
++        t0 = time.monotonic()
++
++        proxy_url = request.meta.get("proxy")
++        proxy_kwarg = {"server": proxy_url} if proxy_url else None
++
++        # Infinite-scroll support: request.meta["scroll"] = True (use defaults)
++        # or a dict of overrides, e.g. {"max_scrolls": 20, "pause_ms": 500}.
++        scroll_opts = request.meta.get("scroll")
++
++        if self._browser_pool is not None:
++            resp, body = await self._fetch_playwright_pooled(request, proxy_kwarg, scroll_opts)
++        else:
++            resp, body = await self._fetch_playwright_unpooled(request, proxy_kwarg, scroll_opts)
++
++        elapsed = (time.monotonic() - t0) * 1000
++        return Response(
++            url=request.url,
++            status=resp.status if resp else 200,
++            headers={},
++            body=body,
++            request=request,
++            elapsed_ms=elapsed,
++            encoding="utf-8",
++        )
++
++    async def _fetch_playwright_pooled(
++        self,
++        request: Request,
++        proxy_kwarg: dict[str, str] | None,
++        scroll_opts: Any,
++    ) -> tuple[Any, bytes]:
++        assert self._browser_pool is not None
++        async with self._browser_pool.acquire_context(
++            proxy=proxy_kwarg,
++            extra_http_headers=request.headers or {},
++            user_agent=self.settings.user_agent,
++        ) as context:
++            page = await context.new_page()
++            resp = await page.goto(request.url, wait_until="networkidle")
++            if scroll_opts:
++                opts = scroll_opts if isinstance(scroll_opts, dict) else {}
++                await scroll_to_bottom(page, **opts)
++            body = (await page.content()).encode("utf-8")
++        return resp, body
++
++    async def _fetch_playwright_unpooled(
++        self,
++        request: Request,
++        proxy_kwarg: dict[str, str] | None,
++        scroll_opts: Any,
++    ) -> tuple[Any, bytes]:
+         try:
+             from playwright.async_api import async_playwright
+         except ImportError as err:
+@@ -154,36 +495,34 @@
+                 "playwright is required for JS rendering. "
+                 "Install with: pip install bitscrape[playwright]"
+             ) from err
+-        t0 = time.monotonic()
++
+         async with async_playwright() as pw:
+             browser_type = getattr(pw, self.settings.playwright_browser)
+-            browser = await browser_type.launch(headless=self.settings.playwright_headless)
++            launch_kwargs: dict[str, Any] = {"headless": self.settings.playwright_headless}
++            if proxy_kwarg:
++                launch_kwargs["proxy"] = proxy_kwarg
++            browser = await browser_type.launch(**launch_kwargs)
+             context = await browser.new_context(
+                 extra_http_headers=request.headers or {},
+                 user_agent=self.settings.user_agent,
+             )
+             page = await context.new_page()
+             resp = await page.goto(request.url, wait_until="networkidle")
++
++            if scroll_opts:
++                opts = scroll_opts if isinstance(scroll_opts, dict) else {}
++                await scroll_to_bottom(page, **opts)
++
+             body = (await page.content()).encode("utf-8")
+             await browser.close()
+-
+-        elapsed = (time.monotonic() - t0) * 1000
+-        return Response(
+-            url=request.url,
+-            status=resp.status if resp else 200,
+-            headers={},
+-            body=body,
+-            request=request,
+-            elapsed_ms=elapsed,
+-            encoding="utf-8",
+-        )
++        return resp, body
+ 
+     # ------------------------------------------------------------------
+     # Helpers
+     # ------------------------------------------------------------------
+ 
+     async def _apply_delay(self, domain: str) -> None:
+-        delay = self.settings.download_delay
++        delay = self._autothrottle.get_delay(domain) if self._autothrottle else self.settings.download_delay
+         if delay <= 0:
+             return
+         last = self._last_request_time.get(domain, 0.0)
+@@ -197,3 +536,62 @@
+     from urllib.parse import urlparse
+ 
+     return urlparse(url).netloc
++
++
++async def scroll_to_bottom(
++    page: Any,
++    max_scrolls: int = 20,
++    pause_ms: int = 300,
++    stable_rounds: int = 2,
++    click_selector: str | None = None,
++) -> int:
++    """
++    Reusable infinite-scroll / "load more" driver for the Playwright path.
++
++    Bitscrape's HTTP downloader only fetches the static, initial DOM, so any
++    site that lazy-loads content on scroll returns nothing beyond that. The
++    Playwright path launches a real browser but previously had no built-in
++    scroll loop, so callers had to hand-roll this for every site.
++
++    Repeatedly scrolls the page to the bottom, waiting ``pause_ms`` between
++    scrolls for lazy content to load, and stops once the page height hasn't
++    grown for ``stable_rounds`` consecutive scrolls (or ``max_scrolls`` is
++    hit, whichever comes first).
++
++    If ``click_selector`` is given (e.g. ``"button.load-more"``), that
++    element is clicked once per round (when present and visible) before
++    measuring page height — supporting "click to load more" pagination in
++    addition to pure scroll-triggered lazy loading.
++
++    Returns the number of scroll rounds actually performed. Safe to call on
++    pages with no scrollable content: it will simply detect no height change
++    and return after ``stable_rounds`` rounds.
++    """
++    last_height = await page.evaluate("document.body.scrollHeight")
++    stable_count = 0
++    rounds = 0
++
++    for _ in range(max_scrolls):
++        rounds += 1
++
++        if click_selector:
++            try:
++                locator = page.locator(click_selector)
++                if await locator.count() > 0 and await locator.first.is_visible():
++                    await locator.first.click(timeout=1000)
++            except Exception:  # noqa: BLE001, S110 -- button absent/unclickable is expected, keep scrolling
++                pass
++
++        await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
++        await page.wait_for_timeout(pause_ms)
++
++        new_height = await page.evaluate("document.body.scrollHeight")
++        if new_height <= last_height:
++            stable_count += 1
++            if stable_count >= stable_rounds:
++                break
++        else:
++            stable_count = 0
++        last_height = new_height
++
++    return rounds
+diff -ru original/bitscrape/engine.py /home/claude/bitscrape_work/src/bitscrape/engine.py
+--- original/bitscrape/engine.py	2026-07-21 19:00:56.162043250 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/engine.py	2026-07-28 03:22:36.358681300 +0000
+@@ -19,12 +19,13 @@
+ 
+ from bitscrape.core.models import CrawlStats, Request, Response
+ from bitscrape.core.settings import Settings
+-from bitscrape.core.spider import Spider
++from bitscrape.core.spider import Spider, _current_response_var
+ from bitscrape.downloader.downloader import Downloader, DownloadError
+ from bitscrape.exporters.feed import BaseExporter
+ from bitscrape.middleware.middleware import MiddlewareManager
+ from bitscrape.parser.selector import ParsedResponse
+ from bitscrape.pipeline.pipelines import PipelineManager
++from bitscrape.plugins import PluginManager
+ from bitscrape.scheduler.scheduler import Scheduler
+ 
+ logger = logging.getLogger(__name__)
+@@ -47,6 +48,7 @@
+         pipelines: list[Any] | None = None,
+         middlewares: list[Any] | None = None,
+         exporter: BaseExporter | None = None,
++        plugin_manager: PluginManager | None = None,
+     ) -> None:
+         self._spider = spider
+         self._settings = settings or Settings()
+@@ -55,8 +57,26 @@
+         self._pipeline_manager = PipelineManager(pipelines or [])
+         self._middleware_manager = MiddlewareManager(middlewares or [])
+         self._exporter = exporter
++        self._plugins = plugin_manager or PluginManager()
+         self._stats = CrawlStats()
+         self._running = False
++        self._finish_reason = "finished"
++
++    @property
++    def stats(self) -> CrawlStats:
++        """Live crawl stats -- safe to read while a crawl is in progress
++        (e.g. from a StatsMonitor polling this on a timer), not just after
++        run() returns."""
++        return self._stats
++
++    @property
++    def _sched(self) -> Scheduler:
++        """Type-narrowed accessor for the scheduler. Only valid once
++        ``run()`` has initialised it; raises a clear error otherwise rather
++        than a bare AttributeError on ``None``."""
++        if self._scheduler is None:
++            raise RuntimeError("Engine.run() must be started before the scheduler is used")
++        return self._scheduler
+ 
+     # ------------------------------------------------------------------
+     # Public entry-point
+@@ -72,13 +92,15 @@
+         await self._downloader.open()
+         await self._pipeline_manager.open_spider(self._spider)
+         await self._spider.open_spider()
++        await self._plugins.fire("spider_opened", spider=self._spider)
+ 
+         if self._exporter:
+             self._exporter.open()
+ 
+         # Seed start requests
+         for req in self._spider.start_requests():
+-            await self._scheduler.enqueue(req)
++            await self._sched.enqueue(req)
++            await self._plugins.fire("request_scheduled", request=req, spider=self._spider)
+ 
+         # Concurrency gate
+         semaphore = asyncio.Semaphore(self._settings.concurrent_requests)
+@@ -94,7 +116,7 @@
+                         logger.error("Worker error: %s", t.exception())
+ 
+                 # Pop next request
+-                request = await self._scheduler.next_request()
++                request = await self._sched.next_request()
+                 if request is None:
+                     if not tasks:
+                         break  # queue empty and no in-flight requests → done
+@@ -111,6 +133,7 @@
+ 
+         except asyncio.CancelledError:
+             logger.info("Engine cancelled")
++            self._finish_reason = "cancelled"
+         finally:
+             await self._teardown()
+ 
+@@ -138,6 +161,9 @@
+                 self._stats.requests_made += 1
+                 self._stats.responses_received += 1
+                 self._stats.bytes_downloaded += len(response.body)
++                await self._plugins.fire(
++                    "response_received", request=request, response=response, spider=self._spider
++                )
+ 
+                 # Middleware: process_response
+                 resp_result = await self._middleware_manager.process_response(
+@@ -146,7 +172,10 @@
+                 if resp_result is None:
+                     return
+                 if isinstance(resp_result, Request):
+-                    await self._scheduler.enqueue(resp_result)
++                    await self._sched.enqueue(resp_result)
++                    await self._plugins.fire(
++                        "request_scheduled", request=resp_result, spider=self._spider
++                    )
+                     return
+                 response = resp_result
+ 
+@@ -156,15 +185,21 @@
+             except DownloadError as exc:
+                 self._stats.requests_failed += 1
+                 logger.warning("Download error: %s — %s", request.url, exc)
++                await self._plugins.fire(
++                    "error", request=request, exception=exc, spider=self._spider
++                )
+                 exc_result = await self._middleware_manager.process_exception(
+                     request, exc, self._spider
+                 )
+                 if isinstance(exc_result, Request):
+-                    await self._scheduler.enqueue(exc_result)
++                    await self._sched.enqueue(exc_result)
+ 
+             except Exception as exc:
+                 self._stats.requests_failed += 1
+-                logger.error("Unexpected error on %s: %s", request.url, exc, exc_info=True)
++                logger.exception("Unexpected error on %s", request.url)
++                await self._plugins.fire(
++                    "error", request=request, exception=exc, spider=self._spider
++                )
+ 
+     async def _parse_response(self, request: Request, response: Response) -> None:
+         # Resolve callback name → spider method
+@@ -174,22 +209,91 @@
+             logger.warning("Spider has no callback %r", callback_name)
+             return
+ 
++        # Page-level indexing directives (set by MetaRobotsMiddleware from
++        # X-Robots-Tag / <meta name="robots">). "noindex" means fetchable
++        # but its content shouldn't be indexed/exported; "nofollow" means
++        # don't follow links discovered on this page. Mirrors what
++        # Googlebot/ClaudeBot/PerplexityBot-class crawlers do beyond
++        # robots.txt.
++        respect_meta_robots = getattr(self._settings, "respect_meta_robots", True)
++        noindex = respect_meta_robots and request.meta.get("noindex", False)
++        nofollow = respect_meta_robots and request.meta.get("nofollow", False)
++
+         parsed = ParsedResponse(response)
++        items_this_response = 0
++        requests_this_response = 0
++        # Set for the duration of this callback so Spider.follow() can
++        # resolve relative URLs against this response. Safe under the
++        # Engine's concurrent per-request tasks: contextvars.ContextVar.set()
++        # only affects the current asyncio Task's context, not sibling
++        # tasks processing other requests at the same time.
++        context_token = _current_response_var.set(response)
+         try:
+-            async for output in callback(parsed):  # type: ignore[arg-type]
+-                if isinstance(output, Request):
+-                    output = output.model_copy(update={"depth": request.depth + 1})
+-                    await self._scheduler.enqueue(output)
+-                else:
+-                    # It's an item (dict or BaseModel)
+-                    self._stats.items_scraped += 1
+-                    processed = await self._pipeline_manager.process_item(output, self._spider)
+-                    if processed is None:
+-                        self._stats.items_dropped += 1
+-                    elif self._exporter:
+-                        self._exporter.export_item(processed)
+-        except Exception as exc:
+-            logger.error("Parse error on %s: %s", request.url, exc, exc_info=True)
++            try:
++                async for output in callback(parsed):
++                    if isinstance(output, Request):
++                        requests_this_response += 1
++                        if nofollow:
++                            self._stats.links_nofollow_skipped += 1
++                            logger.debug(
++                                "Skipping %s: nofollow directive on %s", output.url, response.url
++                            )
++                            continue
++                        output = output.model_copy(update={"depth": request.depth + 1})
++                        await self._sched.enqueue(output)
++                        await self._plugins.fire(
++                            "request_scheduled", request=output, spider=self._spider
++                        )
++                    else:
++                        # It's an item (dict or BaseModel)
++                        items_this_response += 1
++                        if noindex:
++                            self._stats.items_noindexed += 1
++                            logger.debug(
++                                "Not indexing item from %s: noindex directive", response.url
++                            )
++                            continue
++                        self._stats.items_scraped += 1
++                        processed = await self._pipeline_manager.process_item(output, self._spider)
++                        if processed is None:
++                            self._stats.items_dropped += 1
++                            await self._plugins.fire(
++                                "item_dropped",
++                                item=output,
++                                exception=Exception("dropped by pipeline"),
++                                spider=self._spider,
++                            )
++                        else:
++                            if self._exporter:
++                                self._exporter.export_item(processed)
++                            await self._plugins.fire(
++                                "item_scraped", item=processed, spider=self._spider
++                            )
++            except Exception:
++                logger.exception("Parse error on %s", request.url)
++                return
++        finally:
++            _current_response_var.reset(context_token)
++
++        # Diagnostic: a callback that yields nothing at all is almost always a
++        # sign that CSS/XPath selectors don't match the page, robots.txt/JS
++        # rendering left the body empty, or the wrong callback ran -- not a
++        # crash, so nothing else would ever surface it. Surface it here
++        # instead of leaving users staring at a silent "Items scraped: 0".
++        # (Doesn't fire for noindex/nofollow pages -- that's an intentional
++        # skip, not a broken selector.)
++        if items_this_response == 0 and requests_this_response == 0:
++            body_len = len(response.body)
++            logger.warning(
++                "%s: callback %r yielded 0 items and 0 requests from a %d-byte response. "
++                "This usually means your CSS/XPath selectors don't match this page's HTML "
++                "(inspect response.text / response.body), the content is JS-rendered and "
++                "needs use_playwright=True, or robots.txt / a redirect served an "
++                "unexpected page. See README 'Troubleshooting: 0 items scraped'.",
++                response.url,
++                callback_name,
++                body_len,
++            )
+ 
+     # ------------------------------------------------------------------
+     # Teardown
+@@ -203,6 +307,9 @@
+         await self._downloader.close()
+         if self._scheduler:
+             await self._scheduler.close()
++        await self._plugins.fire(
++            "spider_closed", spider=self._spider, reason=self._finish_reason
++        )
+ 
+     # ------------------------------------------------------------------
+     # Stats
+Only in /home/claude/bitscrape_work/src/bitscrape: entity_resolution.py
+diff -ru original/bitscrape/exporters/feed.py /home/claude/bitscrape_work/src/bitscrape/exporters/feed.py
+--- original/bitscrape/exporters/feed.py	2026-07-21 19:00:56.168041479 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/exporters/feed.py	2026-07-29 02:30:26.647372176 +0000
+@@ -11,10 +11,12 @@
+ import csv
+ import json
+ import logging
++import re
+ import sys
+ from abc import ABC, abstractmethod
+ from pathlib import Path
+ from typing import Any, TextIO
++from xml.sax.saxutils import escape as _xml_escape
+ 
+ from pydantic import BaseModel
+ 
+@@ -116,6 +118,24 @@
+ # ---------------------------------------------------------------------------
+ 
+ 
++_INVALID_XML_TAG_CHARS = re.compile(r"[^A-Za-z0-9_.\-]")
++
++
++def _sanitize_xml_tag(key: str) -> str:
++    """
++    Turns an arbitrary dict key into a valid XML element name: replaces
++    characters not allowed in XML names with `_`, and prefixes with `_` if
++    the result would start with a digit or be empty (XML element names
++    can't start with a digit, and mustn't be empty) -- e.g. a scraped
++    item's key like "2024 sales" or "price ($)" would otherwise produce
++    invalid XML output.
++    """
++    sanitized = _INVALID_XML_TAG_CHARS.sub("_", key)
++    if not sanitized or sanitized[0].isdigit():
++        sanitized = f"_{sanitized}"
++    return sanitized
++
++
+ class XMLExporter(BaseExporter):
+     def open(self) -> None:
+         super().open()
+@@ -127,7 +147,9 @@
+         d = _item_to_dict(item)
+         self._file.write("  <item>\n")
+         for k, v in d.items():
+-            self._file.write(f"    <{k}>{v}</{k}>\n")
++            tag = _sanitize_xml_tag(k)
++            value = "" if v is None else _xml_escape(str(v))
++            self._file.write(f"    <{tag}>{value}</{tag}>\n")
+         self._file.write("  </item>\n")
+         self._count += 1
+ 
+Only in /home/claude/bitscrape_work/src/bitscrape: factory.py
+Only in /home/claude/bitscrape_work/src/bitscrape: frontier.py
+Only in /home/claude/bitscrape_work/src/bitscrape: knowledge_graph.py
+Only in /home/claude/bitscrape_work/src/bitscrape: link_analysis.py
+diff -ru original/bitscrape/middleware/middleware.py /home/claude/bitscrape_work/src/bitscrape/middleware/middleware.py
+--- original/bitscrape/middleware/middleware.py	2026-07-21 19:00:56.168317611 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/middleware/middleware.py	2026-07-27 10:40:31.300028163 +0000
+@@ -13,8 +13,10 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import logging
+ import random
++import re
+ from abc import ABC, abstractmethod
+ from typing import Any
+ from urllib.parse import urlparse
+@@ -78,21 +80,116 @@
+ 
+ 
+ # ---------------------------------------------------------------------------
++# Proxy rotation
++# ---------------------------------------------------------------------------
++
++
++class ProxyMiddleware(BaseMiddleware):
++    """
++    Rotates outbound proxies per request, the same way ``UserAgentMiddleware``
++    rotates User-Agent strings. Without this, a single-IP crawler eventually
++    hits IP-reputation or rate-based blocking on any site that watches for it.
++
++    ``proxies`` accepts full proxy URLs, e.g. ``"http://user:pass@host:port"``.
++    Sets ``request.meta["proxy"]``, which the downloader can read and pass
++    through as ``aiohttp``'s ``proxy=`` kwarg (or Playwright's
++    ``proxy={"server": ...}`` for the browser path).
++
++    ``rotate=False`` (default) always uses the first proxy in the list — set
++    ``True`` to pick a new one per request. Pass a callable via
++    ``on_exhausted`` to be notified when a request is retried and you may
++    want to swap out a dead proxy from the pool.
++    """
++
++    def __init__(self, proxies: list[str] | None = None, rotate: bool = True) -> None:
++        self._proxies = proxies or []
++        self._rotate = rotate
++        self._idx = 0
++
++    @property
++    def proxies(self) -> list[str]:
++        return list(self._proxies)
++
++    def add_proxy(self, proxy_url: str) -> None:
++        self._proxies.append(proxy_url)
++
++    def remove_proxy(self, proxy_url: str) -> None:
++        """Drop a proxy from rotation, e.g. after repeated failures."""
++        self._proxies = [p for p in self._proxies if p != proxy_url]
++
++    def _next_proxy(self) -> str | None:
++        if not self._proxies:
++            return None
++        if self._rotate:
++            return random.choice(self._proxies)
++        proxy = self._proxies[self._idx % len(self._proxies)]
++        self._idx += 1
++        return proxy
++
++    async def process_request(self, request: Request, spider: Any) -> None:
++        proxy = self._next_proxy()
++        if proxy is None:
++            return None
++        meta = {**request.meta, "proxy": proxy}
++        return request.model_copy(update={"meta": meta})  # type: ignore[return-value]
++
++
++# ---------------------------------------------------------------------------
+ # Robots.txt
+ # ---------------------------------------------------------------------------
+ 
+ 
++class RobotsInfo:
++    """Parsed robots.txt data for one domain: the parser plus its directives."""
++
++    __slots__ = ("crawl_delay", "parser", "sitemaps")
++
++    def __init__(
++        self,
++        parser: Any,
++        crawl_delay: float | None,
++        sitemaps: list[str],
++    ) -> None:
++        self.parser = parser
++        self.crawl_delay = crawl_delay
++        self.sitemaps = sitemaps
++
++
+ class RobotsMiddleware(BaseMiddleware):
+     """
+-    Downloads and caches robots.txt for each domain and blocks disallowed paths.
++    Downloads and caches robots.txt for each domain, blocks disallowed paths,
++    and exposes ``Crawl-delay`` / ``Sitemap`` directives.
++
++    ROOT-CAUSE FIX: the previous implementation called ``parser.feed(text)``,
++    but ``urllib.robotparser.RobotFileParser`` has no ``feed()`` method (only
++    ``.parse(lines)``). Every single robots.txt fetch therefore raised
++    ``AttributeError``, which the surrounding ``except Exception`` silently
++    swallowed by setting the cached parser to ``None`` — meaning
++    ``robotstxt_obey`` was **always a no-op in practice**, regardless of its
++    setting, because ``info.parser`` was always ``None`` and
++    ``can_fetch()`` was never actually called. This was a correctness bug,
++    not just a missing-feature gap.
++
++    Once ``.parse()`` is used correctly, ``RobotFileParser`` already exposes
++    ``Crawl-delay`` via ``.crawl_delay(useragent)`` and ``Sitemap`` entries
++    via ``.site_maps()`` natively — no manual re-parsing of the raw text is
++    needed for those either.
++
++    Fail-safe behaviour: if robots.txt cannot be fetched (network error,
++    timeout, non-200 status), we no longer treat that as "no restrictions".
++    A 4xx (including 404) is treated as "robots.txt does not exist" — full
++    access is allowed, matching the standard convention. Any other failure
++    (timeout, connection error, 5xx) is fail-safe: requests to that domain
++    are blocked until a successful fetch, since a server error means the
++    real rules are unknown, not that there are none.
+     """
+ 
+     def __init__(self) -> None:
+-        self._parsers: dict[str, Any] = {}
++        self._cache: dict[str, RobotsInfo | None] = {}
+ 
+-    async def _get_parser(self, domain: str, scheme: str) -> Any:
+-        if domain in self._parsers:
+-            return self._parsers[domain]
++    async def _get_info(self, domain: str, scheme: str, user_agent: str) -> RobotsInfo | None:
++        if domain in self._cache:
++            return self._cache[domain]
+         try:
+             from urllib.robotparser import RobotFileParser
+ 
+@@ -103,29 +200,157 @@
+                 aiohttp.ClientSession() as sess,
+                 sess.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp,
+             ):
++                if 400 <= resp.status < 500:
++                    # No robots.txt published -> unrestricted access, and we
++                    # can safely cache "no rules" rather than fail-safe.
++                    self._cache[domain] = RobotsInfo(parser=None, crawl_delay=None, sitemaps=[])
++                    return self._cache[domain]
++                resp.raise_for_status()
+                 text = await resp.text()
++
+             parser = RobotFileParser()
+             parser.set_url(url)
+-            parser.feed(text)
+-            self._parsers[domain] = parser
+-        except Exception:
+-            self._parsers[domain] = None
+-        return self._parsers[domain]
++            parser.parse(text.splitlines())  # NOT .feed() -- see class docstring
++
++            ua_token = user_agent.split("/")[0].strip() or "*"
++            raw_delay = parser.crawl_delay(ua_token)
++            if raw_delay is None and ua_token != "*":
++                raw_delay = parser.crawl_delay("*")
++            crawl_delay = float(raw_delay) if raw_delay is not None else None
++            sitemaps = list(parser.site_maps() or [])
++
++            info = RobotsInfo(parser=parser, crawl_delay=crawl_delay, sitemaps=sitemaps)
++            self._cache[domain] = info
++            return info
++        except Exception as exc:  # noqa: BLE001 -- intentional: any failure must fail safe
++            logger.warning(
++                "robots.txt fetch failed for %s (%s) — failing safe, blocking until a "
++                "successful fetch",
++                domain,
++                exc,
++            )
++            # Deliberately NOT cached: retry on the next request instead of
++            # permanently locking the domain out over one transient error.
++            return None
+ 
+     async def process_request(self, request: Request, spider: Any) -> None:
+         if not spider.settings.robotstxt_obey:
+-            return None
++            return
+         parsed = urlparse(request.url)
+         domain = parsed.netloc
+         scheme = parsed.scheme
+         ua = spider.settings.user_agent
+-        parser = await self._get_parser(domain, scheme)
+-        if parser and not parser.can_fetch(ua, request.url):
++
++        info = await self._get_info(domain, scheme, ua)
++        if info is None:
++            # Fetch failed and nothing cached yet: fail safe rather than
++            # silently allowing everything through.
++            from bitscrape.pipeline.pipelines import DropItem
++
++            raise DropItem(
++                f"robots.txt unavailable for {domain}; blocking until it can be verified"
++            )
++
++        if info.sitemaps:
++            request.meta.setdefault("sitemaps", info.sitemaps)
++        if info.crawl_delay is not None:
++            request.meta.setdefault("crawl_delay", info.crawl_delay)
++
++        if info.parser and not info.parser.can_fetch(ua, request.url):
+             logger.info("Blocked by robots.txt: %s", request.url)
+             from bitscrape.pipeline.pipelines import DropItem
+ 
+             raise DropItem(f"robots.txt disallows: {request.url}")
+-        return None
++        return
++
++
++# ---------------------------------------------------------------------------
++# Page-level indexing directives (meta robots / X-Robots-Tag)
++# ---------------------------------------------------------------------------
++
++_META_ROBOTS_RE = re.compile(
++    r"""<meta\s+[^>]*name=["']robots["'][^>]*content=["']([^"']*)["']""",
++    re.IGNORECASE,
++)
++# Some sites scope directives to a specific crawler, e.g.
++# <meta name="googlebot" content="noindex">. We also honour a directive
++# scoped to "robots" generically, or to a name matching our own UA token.
++_META_ROBOTS_SCOPED_RE_TEMPLATE = (
++    r"""<meta\s+[^>]*name=["']{name}["'][^>]*content=["']([^"']*)["']"""
++)
++
++
++def _parse_robots_directives(value: str) -> set[str]:
++    return {token.strip().lower() for token in value.split(",") if token.strip()}
++
++
++class MetaRobotsMiddleware(BaseMiddleware):
++    """
++    Honours page-level indexing directives that robots.txt can't express:
++
++      - ``X-Robots-Tag`` HTTP response header
++      - ``<meta name="robots" content="...">`` HTML tag (and a UA-scoped
++        variant like ``<meta name="googlebot" content="noindex">``)
++
++    This is what Googlebot / ClaudeBot / PerplexityBot-class crawlers honour
++    in addition to robots.txt: a page can be fetchable but marked
++    ``noindex`` (don't index/use its content) or ``nofollow`` (don't follow
++    links found on it). ``none`` is shorthand for both.
++
++    Sets ``request.meta["noindex"]`` / ``request.meta["nofollow"]`` (bool),
++    which the Engine reads to skip counting/exporting items and to skip
++    enqueueing follow-up links, when ``settings.respect_meta_robots`` is
++    enabled (default True). This middleware never drops the response itself
++    — fetching is still allowed; only indexing/following is affected, which
++    matches the real-world semantics of these directives.
++    """
++
++    async def process_request(self, request: Request, spider: Any) -> None:
++        return None  # this middleware only acts on responses
++
++    async def process_response(self, request: Request, response: Response, spider: Any) -> Any:
++        if not getattr(spider.settings, "respect_meta_robots", True):
++            return response
++
++        directives: set[str] = set()
++
++        header_value = response.headers.get("X-Robots-Tag")
++        if header_value:
++            directives |= _parse_robots_directives(header_value)
++
++        content_type = response.headers.get("Content-Type", "")
++        if "html" in content_type.lower() or not content_type:
++            try:
++                text = response.text
++            except Exception:  # noqa: BLE001 -- any decode failure just means no directives found
++                text = ""
++            if text:
++                for match in _META_ROBOTS_RE.finditer(text):
++                    directives |= _parse_robots_directives(match.group(1))
++
++                ua_token = spider.settings.user_agent.split("/")[0].strip().lower()
++                if ua_token:
++                    scoped_re = re.compile(
++                        _META_ROBOTS_SCOPED_RE_TEMPLATE.format(name=re.escape(ua_token)),
++                        re.IGNORECASE,
++                    )
++                    for match in scoped_re.finditer(text):
++                        directives |= _parse_robots_directives(match.group(1))
++
++        noindex = "noindex" in directives or "none" in directives
++        nofollow = "nofollow" in directives or "none" in directives
++
++        if noindex or nofollow:
++            logger.info(
++                "Meta robots directives on %s: noindex=%s nofollow=%s",
++                request.url,
++                noindex,
++                nofollow,
++            )
++
++        request.meta["noindex"] = noindex
++        request.meta["nofollow"] = nofollow
++        return response
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -165,6 +390,154 @@
+ 
+ 
+ # ---------------------------------------------------------------------------
++# Distributed throttling (multi-worker, Redis-backed)
++# ---------------------------------------------------------------------------
++
++
++class DistributedThrottleMiddleware(BaseMiddleware):
++    """
++    A Redis-backed per-domain lease so multiple worker PROCESSES sharing the
++    same Redis don't independently hammer the same domain at once. Solves the
++    gap flagged in earlier fixes: "no distributed coordination beyond the
++    Redis queue itself -- multiple workers crawling the same domain
++    simultaneously risk duplicate load / rate-limit violations."
++
++    This is a lease, not a mutex: it enforces MINIMUM SPACING between
++    requests to a domain across the whole cluster (``SET key val NX PX
++    <delay_ms>``), rather than one-at-a-time exclusive access, since crawling
++    is throughput-oriented, not a critical section.
++
++    Uses ``request.meta["crawl_delay"]`` (set by RobotsMiddleware from the
++    site's own robots.txt) if present, falling back to
++    ``settings.download_delay``. A delay of 0 means "no throttling" and is a
++    fast no-op (skips Redis entirely).
++    """
++
++    def __init__(self, redis_client: Any, key_prefix: str = "bitscrape:throttle:") -> None:
++        self._redis = redis_client
++        self._prefix = key_prefix
++
++    async def process_request(self, request: Request, spider: Any) -> None:
++        if not getattr(spider.settings, "distributed_throttle_enabled", False):
++            return
++
++        delay = request.meta.get("crawl_delay") or getattr(spider.settings, "download_delay", 0.0)
++        if not delay or delay <= 0:
++            return
++
++        domain = urlparse(request.url).netloc
++        key = f"{self._prefix}{domain}"
++
++        # Bounded retry loop: try to acquire the lease; if another worker
++        # holds it, sleep out its remaining TTL and try again. Capped so a
++        # pathological clock/Redis issue can't stall a worker forever.
++        for _ in range(50):
++            acquired = await self._redis.set(key, "1", nx=True, px=int(delay * 1000))
++            if acquired:
++                return
++            ttl_ms = await self._redis.pttl(key)
++            wait = (ttl_ms / 1000) if ttl_ms and ttl_ms > 0 else delay
++            await asyncio.sleep(min(wait, delay))
++        logger.warning(
++            "DistributedThrottleMiddleware gave up waiting for lease on %s after 50 attempts",
++            domain,
++        )
++        return
++
++
++# ---------------------------------------------------------------------------
++# Session pooling (rotating cookie-jar sessions per domain)
++# ---------------------------------------------------------------------------
++
++
++class SessionPoolMiddleware(BaseMiddleware):
++    """
++    Maintains a POOL of ``session_pool_size`` independent cookie-jar sessions
++    per domain (instead of ``CookieMiddleware``'s single shared jar), and
++    rotates between them -- useful for maintaining several parallel
++    logged-in sessions, or avoiding a single session's request pattern
++    standing out.
++
++    Session selection: sticky if the request already carries
++    ``request.meta["session_id"]`` (e.g. you deliberately want a specific
++    login session for a sequence of requests); otherwise round-robin per
++    domain.
++
++    Auto-rotation: if ``settings.session_rotate_every > 0``, a session's jar
++    is cleared (starting fresh, e.g. logged out) after that many requests
++    through it -- set to ``0`` (default) to disable and keep sessions
++    indefinitely.
++
++    Don't combine with ``CookieMiddleware`` -- this is a superset (pool of
++    N jars instead of 1); use one or the other.
++    """
++
++    def __init__(self, pool_size: int = 1, rotate_every: int = 0) -> None:
++        self._pool_size = max(1, pool_size)
++        self._rotate_every = rotate_every
++        # domain -> list of per-session cookie jars
++        self._pools: dict[str, list[dict[str, str]]] = {}
++        # domain -> next round-robin index
++        self._next_index: dict[str, int] = {}
++        # (domain, session_id) -> request count since last rotation
++        self._use_count: dict[tuple[str, int], int] = {}
++
++    def _pool_for(self, domain: str) -> list[dict[str, str]]:
++        if domain not in self._pools:
++            self._pools[domain] = [{} for _ in range(self._pool_size)]
++            self._next_index[domain] = 0
++        return self._pools[domain]
++
++    def _pick_session_id(self, domain: str, requested: int | None) -> int:
++        pool = self._pool_for(domain)
++        if requested is not None:
++            return requested % len(pool)
++        idx = self._next_index[domain]
++        self._next_index[domain] = (idx + 1) % len(pool)
++        return idx
++
++    async def process_request(self, request: Request, spider: Any) -> Any:
++        domain = urlparse(request.url).netloc
++        session_id = self._pick_session_id(domain, request.meta.get("session_id"))
++        jar = self._pool_for(domain)[session_id]
++
++        headers = dict(request.headers)
++        if jar:
++            headers["Cookie"] = "; ".join(f"{k}={v}" for k, v in jar.items())
++        meta = {**request.meta, "session_id": session_id}
++        return request.model_copy(update={"headers": headers, "meta": meta})
++
++    async def process_response(self, request: Request, response: Response, spider: Any) -> Response:
++        domain = urlparse(request.url).netloc
++        session_id = request.meta.get("session_id", 0)
++        pool = self._pool_for(domain)
++        session_id = session_id % len(pool)
++        jar = pool[session_id]
++
++        set_cookie = response.headers.get("Set-Cookie", "")
++        if set_cookie:
++            for part in set_cookie.split(";"):
++                kv = part.strip()
++                if "=" in kv:
++                    k, _, v = kv.partition("=")
++                    jar[k.strip()] = v.strip()
++
++        if self._rotate_every > 0:
++            use_key = (domain, session_id)
++            count = self._use_count.get(use_key, 0) + 1
++            if count >= self._rotate_every:
++                pool[session_id] = {}  # rotate: fresh session
++                logger.info("Rotated session %d for %s after %d requests", session_id, domain, count)
++                count = 0
++            self._use_count[use_key] = count
++
++        return response
++
++    def session_count(self, domain: str) -> int:
++        return len(self._pools.get(domain, []))
++
++
++# ---------------------------------------------------------------------------
+ # Middleware manager
+ # ---------------------------------------------------------------------------
+ 
+Only in /home/claude/bitscrape_work/src/bitscrape: monitoring.py
+Only in /home/claude/bitscrape_work/src/bitscrape: observability.py
+diff -ru original/bitscrape/parser/selector.py /home/claude/bitscrape_work/src/bitscrape/parser/selector.py
+--- original/bitscrape/parser/selector.py	2026-07-21 19:00:56.168516513 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/parser/selector.py	2026-07-29 10:57:40.831541936 +0000
+@@ -325,11 +325,16 @@
+     """Apply an XPath query — always uses parsel/lxml."""
+     if backend == "parsel":
+         matched = node.xpath(query)
+-        # If results are strings (e.g. text()) return them directly
++        # parsel always wraps results in a Selector, even for text()/@attr
++        # queries -- the underlying string value lives at `.root`, not the
++        # Selector object itself, so `isinstance(m, str)` here was always
++        # False (a real bug: text()/@attr XPath queries were silently
++        # broken whenever parsel was the *native* backend, i.e. selectolax
++        # unavailable -- fixed by checking `m.root` instead of `m`).
+         items: list[Any] = []
+         for m in matched:
+-            if isinstance(m, str):
+-                items.append(m)
++            if isinstance(m.root, str):
++                items.append(m.root)
+             else:
+                 items.append(NodeSelector(m, backend="parsel"))
+         return SelectorList(items, is_text=False)
+Only in /home/claude/bitscrape_work/src/bitscrape: plugins.py
+Only in /home/claude/bitscrape_work/src/bitscrape: ranking.py
+Only in /home/claude/bitscrape_work/src/bitscrape: recrawl.py
+diff -ru original/bitscrape/scheduler/dupefilter.py /home/claude/bitscrape_work/src/bitscrape/scheduler/dupefilter.py
+--- original/bitscrape/scheduler/dupefilter.py	2026-07-21 19:00:56.168986530 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/scheduler/dupefilter.py	2026-07-27 10:40:31.362542377 +0000
+@@ -56,7 +56,7 @@
+ class RedisDupeFilter(BaseDupeFilter):
+     """Distributed dupe filter backed by a Redis set."""
+ 
+-    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:dupes") -> None:  # type: ignore[name-defined]
++    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:dupes") -> None:
+         self._redis = redis_client
+         self._key = key
+ 
+diff -ru original/bitscrape/scheduler/scheduler.py /home/claude/bitscrape_work/src/bitscrape/scheduler/scheduler.py
+--- original/bitscrape/scheduler/scheduler.py	2026-07-21 19:00:56.169011714 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/scheduler/scheduler.py	2026-07-27 10:40:31.362920673 +0000
+@@ -10,12 +10,13 @@
+ 
+ from __future__ import annotations
+ 
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, cast
+ 
+ if TYPE_CHECKING:
+     import redis.asyncio
+ 
+ import asyncio
++import itertools
+ import logging
+ from abc import ABC, abstractmethod
+ 
+@@ -52,17 +53,39 @@
+ 
+ 
+ class MemoryQueue(BaseQueue):
+-    """Priority queue in asyncio memory. Lower priority int = higher urgency."""
++    """
++    Priority queue in asyncio memory. Lower priority int = higher urgency.
++
++    Fix: ``asyncio.PriorityQueue`` compares tuple elements left-to-right and
++    falls through to the next element whenever priorities tie. Since
++    ``Request`` defines no ``__lt__``, two same-priority requests pushed
++    together used to raise ``TypeError: '<' not supported between instances
++    of 'Request' and 'Request'`` — the single most common crawl pattern
++    (homepage discovering many same-priority links) crashed the whole run.
++
++    We fix this with a monotonically increasing tiebreaker counter as the
++    second tuple element: ``(priority, counter, request)``. Counters are
++    always unique and strictly increasing, so the heap never needs to compare
++    ``Request`` objects, and FIFO order is preserved within the same priority
++    (first pushed, first popped) — matching the ordering users expect.
++
++    ``maxsize`` (0 = unbounded, the previous behaviour) adds an optional
++    backpressure cap: once full, ``push()`` awaits until a slot frees up
++    instead of growing memory without bound on very large crawls.
++    """
+ 
+-    def __init__(self) -> None:
+-        self._q: asyncio.PriorityQueue[tuple[int, Request]] = asyncio.PriorityQueue()
++    def __init__(self, maxsize: int = 0) -> None:
++        self._q: asyncio.PriorityQueue[tuple[int, int, Request]] = asyncio.PriorityQueue(
++            maxsize=maxsize
++        )
++        self._counter = itertools.count()
+ 
+     async def push(self, request: Request) -> None:
+-        await self._q.put((request.priority.value, request))
++        await self._q.put((request.priority.value, next(self._counter), request))
+ 
+     async def pop(self) -> Request | None:
+         try:
+-            _, req = self._q.get_nowait()
++            _, _, req = self._q.get_nowait()
+             return req
+         except asyncio.QueueEmpty:
+             return None
+@@ -83,7 +106,7 @@
+     Value: JSON-serialised Request
+     """
+ 
+-    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:queue") -> None:  # type: ignore[name-defined]
++    def __init__(self, redis_client: redis.asyncio.Redis, key: str = "bitscrape:queue") -> None:
+         self._redis = redis_client
+         self._key = key
+         self._size_cache = 0
+@@ -97,7 +120,8 @@
+     async def pop(self) -> Request | None:
+         import orjson
+ 
+-        items = await self._redis.zpopmin(self._key, 1)
++        raw = await self._redis.zpopmin(self._key, 1)
++        items = cast("list[tuple[bytes, float]]", raw)
+         if not items:
+             return None
+         payload, _ = items[0]
+@@ -140,14 +164,16 @@
+ 
+     @classmethod
+     async def from_settings(cls, settings: Settings) -> Scheduler:
++        queue: BaseQueue
++        dupefilter: BaseDupeFilter
+         if settings.scheduler_use_redis:
+             import redis.asyncio as aioredis
+ 
+             client = aioredis.from_url(settings.redis_url, decode_responses=False)
+             queue = RedisQueue(client)
+-            dupefilter: BaseDupeFilter = RedisDupeFilter(client)
++            dupefilter = RedisDupeFilter(client)
+         else:
+-            queue = MemoryQueue()
++            queue = MemoryQueue(maxsize=settings.queue_max_size)
+             dupefilter = MemoryDupeFilter()
+         return cls(settings, queue, dupefilter)
+ 
+Only in /home/claude/bitscrape_work/src/bitscrape/storage: backends.py
+diff -ru original/bitscrape/workflow/graph.py /home/claude/bitscrape_work/src/bitscrape/workflow/graph.py
+--- original/bitscrape/workflow/graph.py	2026-07-21 19:00:56.169391981 +0000
++++ /home/claude/bitscrape_work/src/bitscrape/workflow/graph.py	2026-07-31 02:05:33.957091702 +0000
+@@ -53,7 +53,7 @@
+             "langgraph is required for workflow orchestration. pip install langgraph"
+         ) from err
+ 
+-    builder: StateGraph = StateGraph(CrawlState)  # type: ignore[type-arg]
++    builder: StateGraph = StateGraph(CrawlState)
+ 
+     # ------------------------------------------------------------------
+     # Node: fetch
+@@ -84,6 +84,7 @@
+             return state
+         logger.debug("[workflow] parse: %s", state["request_url"])
+         from bitscrape.core.models import Request, Response
++        from bitscrape.core.spider import _current_response_var
+         from bitscrape.parser.selector import ParsedResponse
+ 
+         req = Request(url=state["request_url"])
+@@ -97,11 +98,24 @@
+         items: list[Any] = []
+         new_requests: list[str] = []
+         spider = engine._spider
+-        async for out in spider.parse(pr):  # type: ignore[arg-type]
+-            if isinstance(out, dict) or hasattr(out, "model_dump"):
+-                items.append(out)
+-            else:
+-                new_requests.append(out.url)
++        # Same fix as the main Engine loop: makes self.follow() resolve
++        # relative URLs correctly when a spider is driven through this
++        # LangGraph workflow instead of Engine.run().
++        context_token = _current_response_var.set(resp)
++        try:
++            async for out in spider.parse(pr):
++                if isinstance(out, Request):
++                    new_requests.append(out.url)
++                else:
++                    # A Request is also a pydantic BaseModel (has
++                    # model_dump()), so checking hasattr(out, "model_dump")
++                    # BEFORE isinstance(out, Request) would misclassify
++                    # every follow-up Request as a scraped item -- this
++                    # was a real bug, found via testing, fixed by checking
++                    # Request first.
++                    items.append(out)
++        finally:
++            _current_response_var.reset(context_token)
+         return {**state, "items": items, "new_requests": new_requests}
+ 
+     # ------------------------------------------------------------------

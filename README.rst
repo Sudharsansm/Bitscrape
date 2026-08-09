@@ -21,9 +21,9 @@
 
 # Bitscrape
 
-Bitscrape is a modern, production-grade asynchronous web scraping framework
-built for high-performance crawling, structured data extraction, and browser
-automation.
+**A modular, async Python web scraping framework — simple for a first
+spider, capable of distributed crawling, storage, search-ranking, and
+observability for everything after that.**
 
 It provides fast async networking, powerful HTML parsing, configurable
 pipelines, distributed crawling support, and optional browser rendering with
@@ -72,11 +72,11 @@ playwright install chromium
 * Issue Tracker:
   https://github.com/Sudharsansm/Bitscrape/issues
 
+* Docs:
+  https://github.com/Sudharsansm/Bitscrape/blob/main/docs/
+
 # Run
 
-.. code:: bash
-
-bitscrape crawl examples/quotes_spider.py -o quotes.jsonl
 
 # License
 

@@ -1,0 +1,45 @@
+# NOTE: not live-cluster-tested in this build environment -- see
+# deployment.yaml's header note.
+apiVersion: v1
+kind: Service
+metadata:
+  name: bitscrape-stats
+  labels:
+    app: bitscrape
+spec:
+  selector:
+    app: bitscrape
+    component: worker
+  ports:
+    - name: stats
+      port: 8765
+      targetPort: stats
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bitscrape-config
+data:
+  BITSCRAPE_SCHEDULER_USE_REDIS: "true"
+  BITSCRAPE_DISTRIBUTED_THROTTLE_ENABLED: "true"
+  BITSCRAPE_AUTOTHROTTLE_ENABLED: "true"
+  BITSCRAPE_CONCURRENT_REQUESTS: "16"
+  BITSCRAPE_ROBOTSTXT_OBEY: "true"
+---
+# Keeps a minimum number of workers available during voluntary disruptions
+# (node drains, cluster upgrades) -- standard practice for anything you
+# expect to run continuously, not just crawl-specific.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bitscrape-worker-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: bitscrape
+      component: worker
