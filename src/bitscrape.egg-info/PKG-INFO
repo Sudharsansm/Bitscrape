@@ -104,11 +104,52 @@ Requires-Dist: opentelemetry-api>=1.24; extra == "all"
 Requires-Dist: opentelemetry-sdk>=1.24; extra == "all"
 Dynamic: license-file
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Sudharsansm/Bitscrape/main/docs/bitscrape.png" width="500" alt="Bitscrape">
+</p>
+
+<h1 align="center">Bitscrape</h1>
+
+<p align="center">
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/v/bitscrape.svg">
+  </a>
+  <a href="https://pypi.org/project/bitscrape/">
+    <img src="https://img.shields.io/pypi/pyversions/bitscrape.svg">
+  </a>
+  <a href="https://github.com/Sudharsansm/Bitscrape/blob/main/LICENSE">
+    <img src="https://img.shields.io/pypi/l/bitscrape.svg">
+  </a>
+</p>
+
 # Bitscrape
 
 **A modular, async Python web scraping framework — simple for a first
 spider, capable of distributed crawling, storage, search-ranking, and
 observability for everything after that.**
+
+It provides fast async networking, powerful HTML parsing, configurable
+pipelines, distributed crawling support, and optional browser rendering with
+Playwright.
+
+
+## Install
+
+```bash
+pip install bitscrape
+```
+
+or
+
+```bash
+uv add bitscrape
+```
+
+## Documentation
+
+* Repository: https://github.com/Sudharsansm/Bitscrape
+* Issues: https://github.com/Sudharsansm/Bitscrape/issues
+
 
 ```python
 import bitscrape
