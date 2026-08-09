@@ -527,7 +527,9 @@ class SessionPoolMiddleware(BaseMiddleware):
             count = self._use_count.get(use_key, 0) + 1
             if count >= self._rotate_every:
                 pool[session_id] = {}  # rotate: fresh session
-                logger.info("Rotated session %d for %s after %d requests", session_id, domain, count)
+                logger.info(
+                    "Rotated session %d for %s after %d requests", session_id, domain, count
+                )
                 count = 0
             self._use_count[use_key] = count
 

@@ -211,9 +211,7 @@ class FormRequest(Request):
 # ── Function-based spiders: the simplest possible entry point ──────────────
 
 
-def spider(
-    name: str, start_urls: list[str] | None = None, **class_attrs: Any
-) -> Any:
+def spider(name: str, start_urls: list[str] | None = None, **class_attrs: Any) -> Any:
     """
     Turns a plain async generator function into a full ``Spider`` class --
     the simplest possible way to define a spider when you don't need
@@ -253,8 +251,7 @@ def spider(
             **class_attrs,
         }
         cls_name = (
-            "".join(part.capitalize() for part in name.replace("-", "_").split("_"))
-            + "Spider"
+            "".join(part.capitalize() for part in name.replace("-", "_").split("_")) + "Spider"
         )
         return type(cls_name, (Spider,), attrs)
 

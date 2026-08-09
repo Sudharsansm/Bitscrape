@@ -1,0 +1,113 @@
+diff --git a/src/bitscrape/__init__.py b/src/bitscrape/__init__.py
+index 219021e..b5b4e5a 100644
+--- a/src/bitscrape/__init__.py
++++ b/src/bitscrape/__init__.py
+@@ -211,9 +211,7 @@ class FormRequest(Request):
+ # ── Function-based spiders: the simplest possible entry point ──────────────
+ 
+ 
+-def spider(
+-    name: str, start_urls: list[str] | None = None, **class_attrs: Any
+-) -> Any:
++def spider(name: str, start_urls: list[str] | None = None, **class_attrs: Any) -> Any:
+     """
+     Turns a plain async generator function into a full ``Spider`` class --
+     the simplest possible way to define a spider when you don't need
+@@ -253,8 +251,7 @@ def spider(
+             **class_attrs,
+         }
+         cls_name = (
+-            "".join(part.capitalize() for part in name.replace("-", "_").split("_"))
+-            + "Spider"
++            "".join(part.capitalize() for part in name.replace("-", "_").split("_")) + "Spider"
+         )
+         return type(cls_name, (Spider,), attrs)
+ 
+diff --git a/src/bitscrape/downloader/downloader.py b/src/bitscrape/downloader/downloader.py
+index 1e80b58..26c34e0 100644
+--- a/src/bitscrape/downloader/downloader.py
++++ b/src/bitscrape/downloader/downloader.py
+@@ -146,7 +146,9 @@ class _PooledContext:
+     BrowserContext on it, closes only the context (not the browser) on
+     exit, and returns the browser to the pool."""
+ 
+-    def __init__(self, pool: BrowserPool, proxy: dict[str, str] | None, **context_kwargs: Any) -> None:
++    def __init__(
++        self, pool: BrowserPool, proxy: dict[str, str] | None, **context_kwargs: Any
++    ) -> None:
+         self._pool = pool
+         self._proxy = proxy
+         self._context_kwargs = context_kwargs
+@@ -424,11 +426,7 @@ class Downloader:
+         Prefer the server's own requested backoff (Retry-After) when present
+         and enabled; otherwise fall back to capped exponential backoff.
+         """
+-        if (
+-            retry_after is not None
+-            and self.settings.respect_retry_after
+-            and retry_after >= 0
+-        ):
++        if retry_after is not None and self.settings.respect_retry_after and retry_after >= 0:
+             return min(retry_after, self.settings.max_retry_after_seconds)
+         return min(2**attempt, 30)
+ 
+@@ -522,7 +520,11 @@ class Downloader:
+     # ------------------------------------------------------------------
+ 
+     async def _apply_delay(self, domain: str) -> None:
+-        delay = self._autothrottle.get_delay(domain) if self._autothrottle else self.settings.download_delay
++        delay = (
++            self._autothrottle.get_delay(domain)
++            if self._autothrottle
++            else self.settings.download_delay
++        )
+         if delay <= 0:
+             return
+         last = self._last_request_time.get(domain, 0.0)
+diff --git a/src/bitscrape/engine.py b/src/bitscrape/engine.py
+index b62b9ea..deb1e84 100644
+--- a/src/bitscrape/engine.py
++++ b/src/bitscrape/engine.py
+@@ -307,9 +307,7 @@ class Engine:
+         await self._downloader.close()
+         if self._scheduler:
+             await self._scheduler.close()
+-        await self._plugins.fire(
+-            "spider_closed", spider=self._spider, reason=self._finish_reason
+-        )
++        await self._plugins.fire("spider_closed", spider=self._spider, reason=self._finish_reason)
+ 
+     # ------------------------------------------------------------------
+     # Stats
+diff --git a/src/bitscrape/middleware/middleware.py b/src/bitscrape/middleware/middleware.py
+index f70ccda..caaf87c 100644
+--- a/src/bitscrape/middleware/middleware.py
++++ b/src/bitscrape/middleware/middleware.py
+@@ -527,7 +527,9 @@ class SessionPoolMiddleware(BaseMiddleware):
+             count = self._use_count.get(use_key, 0) + 1
+             if count >= self._rotate_every:
+                 pool[session_id] = {}  # rotate: fresh session
+-                logger.info("Rotated session %d for %s after %d requests", session_id, domain, count)
++                logger.info(
++                    "Rotated session %d for %s after %d requests", session_id, domain, count
++                )
+                 count = 0
+             self._use_count[use_key] = count
+ 
+diff --git a/src/bitscrape/observability.py b/src/bitscrape/observability.py
+index 195edd7..5924273 100644
+--- a/src/bitscrape/observability.py
++++ b/src/bitscrape/observability.py
+@@ -209,9 +209,9 @@ def make_in_memory_tracer(service_name: str = "bitscrape-test") -> tuple[CrawlTr
+ # ---------------------------------------------------------------------------
+ 
+ 
+-_STANDARD_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {
+-    "message"
+-}
++_STANDARD_LOG_RECORD_ATTRS = frozenset(
++    logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()
++) | {"message"}
+ 
+ 
+ class JSONLogFormatter(logging.Formatter):

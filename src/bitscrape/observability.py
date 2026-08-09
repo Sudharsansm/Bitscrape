@@ -209,9 +209,9 @@ def make_in_memory_tracer(service_name: str = "bitscrape-test") -> tuple[CrawlTr
 # ---------------------------------------------------------------------------
 
 
-_STANDARD_LOG_RECORD_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()) | {
-    "message"
-}
+_STANDARD_LOG_RECORD_ATTRS = frozenset(
+    logging.LogRecord("", 0, "", 0, "", (), None).__dict__.keys()
+) | {"message"}
 
 
 class JSONLogFormatter(logging.Formatter):

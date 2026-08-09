@@ -146,7 +146,9 @@ class _PooledContext:
     BrowserContext on it, closes only the context (not the browser) on
     exit, and returns the browser to the pool."""
 
-    def __init__(self, pool: BrowserPool, proxy: dict[str, str] | None, **context_kwargs: Any) -> None:
+    def __init__(
+        self, pool: BrowserPool, proxy: dict[str, str] | None, **context_kwargs: Any
+    ) -> None:
         self._pool = pool
         self._proxy = proxy
         self._context_kwargs = context_kwargs
@@ -424,11 +426,7 @@ class Downloader:
         Prefer the server's own requested backoff (Retry-After) when present
         and enabled; otherwise fall back to capped exponential backoff.
         """
-        if (
-            retry_after is not None
-            and self.settings.respect_retry_after
-            and retry_after >= 0
-        ):
+        if retry_after is not None and self.settings.respect_retry_after and retry_after >= 0:
             return min(retry_after, self.settings.max_retry_after_seconds)
         return min(2**attempt, 30)
 
@@ -522,7 +520,11 @@ class Downloader:
     # ------------------------------------------------------------------
 
     async def _apply_delay(self, domain: str) -> None:
-        delay = self._autothrottle.get_delay(domain) if self._autothrottle else self.settings.download_delay
+        delay = (
+            self._autothrottle.get_delay(domain)
+            if self._autothrottle
+            else self.settings.download_delay
+        )
         if delay <= 0:
             return
         last = self._last_request_time.get(domain, 0.0)

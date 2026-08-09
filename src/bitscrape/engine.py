@@ -307,9 +307,7 @@ class Engine:
         await self._downloader.close()
         if self._scheduler:
             await self._scheduler.close()
-        await self._plugins.fire(
-            "spider_closed", spider=self._spider, reason=self._finish_reason
-        )
+        await self._plugins.fire("spider_closed", spider=self._spider, reason=self._finish_reason)
 
     # ------------------------------------------------------------------
     # Stats

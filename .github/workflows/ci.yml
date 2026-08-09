@@ -80,7 +80,12 @@ jobs:
           cache: "pip"
 
       - name: Install ruff
-        run: pip install ruff
+        # Pinned to the exact same version as the "dev" extra in
+        # pyproject.toml so lint results can't drift when a new ruff
+        # release changes default rule behavior (this previously broke
+        # CI: ruff 0.16.x reformats/reorders imports differently than
+        # the 0.15.22 the code was written against).
+        run: pip install "ruff==0.15.22"
 
       - name: Check lint
         # The package source lives under src/bitscrape (see
