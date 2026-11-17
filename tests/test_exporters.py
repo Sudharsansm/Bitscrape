@@ -291,4 +291,4 @@ def test_get_exporter_returns_correct_class_for_each_format(tmp_path):
 
 def test_get_exporter_unknown_format_raises():
     with pytest.raises((ValueError, KeyError)):
-        get_exporter("yaml", "out.yaml")
+        get_exporter("not-a-real-format", "out.xyz")

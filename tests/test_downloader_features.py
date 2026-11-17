@@ -37,9 +37,9 @@ def test_parse_retry_after_none_when_missing():
 def test_parse_retry_after_http_date_form():
     from email.utils import format_datetime
 
-    from datetime import UTC, datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    future = datetime.now(UTC) + timedelta(seconds=30)
+    future = datetime.now(timezone.utc) + timedelta(seconds=30)
     header = format_datetime(future, usegmt=True)
     delay = _parse_retry_after(header)
     assert delay is not None

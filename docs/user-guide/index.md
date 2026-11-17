@@ -41,8 +41,9 @@ def start_requests(self):
 ```
 
 **`self.follow(url, callback="parse", meta=None, use_playwright=False)`**
-— builds a `Request`. See [#relative-urls-fixed-in-080](#relative-urls-fixed-in-080)
-below — it does **not** resolve relative URLs for you.
+— builds a `Request`, resolving a relative `url` against the response
+currently being parsed. See
+[#relative-urls-fixed-in-080](#relative-urls-fixed-in-080) below.
 
 **Multiple callbacks** — pass `callback="method_name"` to route a
 request's response to a specific method instead of the default `parse`:
@@ -116,8 +117,11 @@ you're on an older version, resolve manually with
 | `concurrent_requests_per_domain` | `4` | Per-domain concurrent request cap |
 | `download_delay` | `0.0` | Fixed seconds between requests to the same domain |
 | `download_timeout` | `30.0` | Per-request timeout (seconds) |
-| `autothrottle_enabled` | `False` | Adaptive per-domain delay based on observed latency (see [architecture/](../architecture/index.md)) |
+| `autothrottle_enabled` | `False` | Adaptive per-domain delay learned from latency; doubles on blocks/429/503, pauses for `Retry-After`, speeds back up when the site recovers (see [autothrottle](../autothrottle.md)) |
 | `autothrottle_start_delay` / `autothrottle_max_delay` / `autothrottle_target_concurrency` | `1.0` / `60.0` / `2.0` | Autothrottle tuning |
+| `autothrottle_block_backoff` / `autothrottle_backoff_factor` / `autothrottle_recovery` | `True` / `2.0` / `0.5` | React to blocks / how hard / how fast to recover |
+| `autothrottle_backoff_codes` / `autothrottle_backoff_on_errors` | `[429, 503]` / `True` | What counts as "slow down" |
+| `domain_delays` / `domain_concurrency` | `{}` / `{}` | Per-domain minimum delay / concurrency overrides (`{"example.com": 2.0}`) |
 | `distributed_throttle_enabled` | `False` | Redis-backed per-domain lease across worker **processes** (needs Redis) |
 
 ### HTTP behavior

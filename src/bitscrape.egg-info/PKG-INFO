@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: bitscrape
-Version: 0.8.0
-Summary: A modern, production-grade async web scraping framework (patched fork: robots.txt, queue-crash, proxy, and infinite-scroll fixes)
+Version: 0.8.1
+Summary: A modern, production-grade async web scraping framework: spiders, browser sessions, network capture, ad blocking, DoH, MCP server, RAG-ready Markdown
 Author: Bitscrape Contributors
 License: MIT License
         
@@ -33,19 +33,22 @@ Keywords: scraping,crawler,async,pydantic,playwright,spider
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Internet :: WWW/HTTP
 Classifier: Topic :: Software Development :: Libraries :: Application Frameworks
 Classifier: Framework :: AsyncIO
 Classifier: Typing :: Typed
-Requires-Python: >=3.11
+Requires-Python: >=3.10
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: aiohttp>=3.9
+Requires-Dist: protego>=0.3
 Requires-Dist: pydantic>=2.6
 Requires-Dist: pydantic-settings>=2.2
-Requires-Dist: selectolax>=0.3
+Requires-Dist: selectolax<1,>=0.3
+Requires-Dist: orjson>=3.9
 Requires-Dist: parsel>=1.9
 Requires-Dist: lxml>=5.0
 Requires-Dist: click>=8.1
@@ -56,6 +59,10 @@ Requires-Dist: redis>=5.0; extra == "redis"
 Requires-Dist: orjson>=3.9; extra == "redis"
 Provides-Extra: cli
 Requires-Dist: rich>=13.0; extra == "cli"
+Requires-Dist: ipython>=8.20; extra == "cli"
+Provides-Extra: mcp
+Requires-Dist: mcp<2,>=1.9; extra == "mcp"
+Requires-Dist: uvicorn>=0.30; extra == "mcp"
 Provides-Extra: storage-sqlite
 Requires-Dist: aiosqlite>=0.19; extra == "storage-sqlite"
 Provides-Extra: storage-postgres
@@ -76,6 +83,41 @@ Provides-Extra: observability
 Requires-Dist: prometheus-client>=0.20; extra == "observability"
 Requires-Dist: opentelemetry-api>=1.24; extra == "observability"
 Requires-Dist: opentelemetry-sdk>=1.24; extra == "observability"
+Provides-Extra: http2
+Requires-Dist: httpx[http2]>=0.27; extra == "http2"
+Provides-Extra: parquet
+Requires-Dist: pyarrow>=14.0; extra == "parquet"
+Provides-Extra: orc
+Requires-Dist: pyarrow>=14.0; extra == "orc"
+Provides-Extra: avro
+Requires-Dist: fastavro>=1.9; extra == "avro"
+Provides-Extra: yaml
+Requires-Dist: pyyaml>=6.0; extra == "yaml"
+Provides-Extra: toml
+Requires-Dist: tomli-w>=1.0; extra == "toml"
+Provides-Extra: protobuf
+Requires-Dist: protobuf>=4.25; extra == "protobuf"
+Provides-Extra: msgpack
+Requires-Dist: msgpack>=1.0; extra == "msgpack"
+Provides-Extra: bson
+Requires-Dist: pymongo>=4.6; extra == "bson"
+Provides-Extra: warc
+Requires-Dist: warcio>=1.7; extra == "warc"
+Provides-Extra: pdf
+Requires-Dist: fpdf2>=2.7; extra == "pdf"
+Provides-Extra: docx
+Requires-Dist: python-docx>=1.1; extra == "docx"
+Provides-Extra: export-formats
+Requires-Dist: pyarrow>=14.0; extra == "export-formats"
+Requires-Dist: fastavro>=1.9; extra == "export-formats"
+Requires-Dist: pyyaml>=6.0; extra == "export-formats"
+Requires-Dist: tomli-w>=1.0; extra == "export-formats"
+Requires-Dist: protobuf>=4.25; extra == "export-formats"
+Requires-Dist: msgpack>=1.0; extra == "export-formats"
+Requires-Dist: pymongo>=4.6; extra == "export-formats"
+Requires-Dist: warcio>=1.7; extra == "export-formats"
+Requires-Dist: fpdf2>=2.7; extra == "export-formats"
+Requires-Dist: python-docx>=1.1; extra == "export-formats"
 Provides-Extra: dev
 Requires-Dist: pytest==9.1.1; extra == "dev"
 Requires-Dist: pytest-asyncio==1.4.0; extra == "dev"
@@ -85,11 +127,16 @@ Requires-Dist: ruff==0.15.22; extra == "dev"
 Requires-Dist: moto[s3]==5.2.2; extra == "dev"
 Requires-Dist: pyyaml==6.0.3; extra == "dev"
 Requires-Dist: mongomock-motor>=0.0.29; extra == "dev"
+Requires-Dist: hypercorn>=0.16; extra == "dev"
+Requires-Dist: trustme>=1.1; extra == "dev"
 Provides-Extra: all
 Requires-Dist: playwright>=1.40; extra == "all"
 Requires-Dist: redis>=5.0; extra == "all"
 Requires-Dist: orjson>=3.9; extra == "all"
 Requires-Dist: rich>=13.0; extra == "all"
+Requires-Dist: ipython>=8.20; extra == "all"
+Requires-Dist: mcp<2,>=1.9; extra == "all"
+Requires-Dist: uvicorn>=0.30; extra == "all"
 Requires-Dist: aiosqlite>=0.19; extra == "all"
 Requires-Dist: asyncpg>=0.29; extra == "all"
 Requires-Dist: boto3>=1.34; extra == "all"
@@ -102,6 +149,17 @@ Requires-Dist: scipy>=1.11; extra == "all"
 Requires-Dist: prometheus-client>=0.20; extra == "all"
 Requires-Dist: opentelemetry-api>=1.24; extra == "all"
 Requires-Dist: opentelemetry-sdk>=1.24; extra == "all"
+Requires-Dist: pyarrow>=14.0; extra == "all"
+Requires-Dist: fastavro>=1.9; extra == "all"
+Requires-Dist: pyyaml>=6.0; extra == "all"
+Requires-Dist: tomli-w>=1.0; extra == "all"
+Requires-Dist: protobuf>=4.25; extra == "all"
+Requires-Dist: msgpack>=1.0; extra == "all"
+Requires-Dist: pymongo>=4.6; extra == "all"
+Requires-Dist: warcio>=1.7; extra == "all"
+Requires-Dist: fpdf2>=2.7; extra == "all"
+Requires-Dist: python-docx>=1.1; extra == "all"
+Requires-Dist: httpx[http2]>=0.27; extra == "all"
 Dynamic: license-file
 
 <p align="center">
@@ -183,8 +241,10 @@ bitscrape.run(parse, settings=bitscrape.Settings(
   session pooling, JS rendering, distributed crawling, live monitoring,
   Prometheus metrics — all opt-in toggles, nothing extra loads unless you
   ask for it.
-- **Respects robots.txt and meta-robots by default**, and fails *safe*
-  (blocks) rather than *open* (allows) if robots.txt can't be fetched.
+- **Respects robots.txt and meta-robots by default** -- `Disallow`/`Allow`
+  (with wildcards), `Crawl-delay`, `Request-rate` (time-windowed), TTL-cached
+  per domain with stale-while-revalidate -- and fails *safe* (blocks) rather
+  than *open* (allows) if robots.txt can't be fetched (see `docs/robots.md`).
 - **Every documented feature has a real test behind it** — a real local
   Redis, a real local HTTP server, a real on-disk SQLite database, a real
   S3 API emulation, real Prometheus/OpenTelemetry libraries. Where
@@ -197,9 +257,13 @@ bitscrape.run(parse, settings=bitscrape.Settings(
 
 | Area | What you get |
 |---|---|
-| **Crawling** | Async fetching (`aiohttp`), retries with `Retry-After` support, conditional GET, robots.txt + meta-robots compliance, redirect-loop detection |
-| **JS rendering** | Playwright integration, pooled browser reuse, infinite-scroll helper |
-| **Distributed crawling** | Redis-backed queue + dedup filter, cross-worker-process politeness throttle, a Mercator-style priority `Frontier` |
+| **Crawling** | Async fetching (`aiohttp`), retries with `Retry-After` support, conditional GET, robots.txt (Disallow/Allow/Crawl-delay/Request-rate, cached) + meta-robots compliance, redirect-loop detection, adaptive autothrottle (latency-tuned per-domain delay, doubles on blocks, honours `Retry-After`, recovers on its own), proxy rotation, dev-mode response caching/replay, blocked-request detection + retry |
+| **JS rendering** | Playwright integration, pooled browser reuse, infinite-scroll helper, CDP remote-browser connect, persistent profiles, background XHR/fetch capture, **`record_requests` network history** (searchable, bounded, HAR export), **saved login state** (`save_state`/`load_state`), **shadow-DOM piercing**, ad/domain/resource-type blocking with a bundled ~3,900-domain list (`bitscrape blocklist update` for ~100k) — see [docs/network-and-state.md](docs/network-and-state.md), [docs/blocking-and-dns.md](docs/blocking-and-dns.md) |
+| **Spider templates** | `CrawlSpider` + `Rule` + `LinkExtractor` (rule-based link following, `allowed_domains` enforced by `OffsiteMiddleware`), `SitemapSpider` (sitemap **or robots.txt**-driven, gzip + sitemap indexes, hreflang alternates), `XMLFeedSpider` (namespace-safe, RSS/Atom), `CSVFeedSpider`, `ShopifySpider` (paginated `/products.json`, one item per variant, deduped), `SiteToMarkdownSpider` / `ContentSpider` (whole site → LLM-ready Markdown) — see [docs/spider-templates.md](docs/spider-templates.md) |
+| **Export formats** | 17 built-in formats — JSON, JSONL, CSV, XML, YAML, TOML, INI, Markdown, MessagePack, BSON, Protobuf, Parquet, ORC, Avro, WARC, PDF, Word (`.docx`) — through one `get_exporter()`, the CLI's `--format`, or in-memory as `result.items.to_json()` / `.to_parquet()` / ... via `ItemList` (`Settings.collect_items=True`) — see [docs/exporters.md](docs/exporters.md) |
+| **AI / RAG integration** | `RagPipeline` (markdown → chunking → BM25/hybrid search, one object), MCP server (`bitscrape mcp`: 14 tools incl. persistent browser sessions, saved logins, network-history search, SSRF guard, bearer-auth HTTP transport — [docs/mcp.md](docs/mcp.md)), a bundled [Agent Skill](agent-skill/SKILL.md) for coding agents |
+| **Developer experience** | `bitscrape get <url>` (one-shot fetch, no spider needed), `bitscrape shell <url>` (IPython REPL with `fetch()`/`view()`/`from_curl()`), `Fetcher`/`AsyncFetcher`/`FetcherSession` for direct HTTP requests (optional real HTTP/2 via `httpx`, no fingerprint impersonation — see [docs/fetchers.md](docs/fetchers.md)), `DynamicFetcher`/`DynamicSession` for JavaScript-driven pages through a real browser (Playwright Chromium, installed Chrome, or a running browser over CDP; hooks, waits, scrolling, XHR capture, authenticated proxies, no stealth patching — see [docs/dynamic-fetcher.md](docs/dynamic-fetcher.md)), sync `bitscrape.fetch_url()` / `bitscrape.run()`, `orjson`-accelerated JSON everywhere (`bitscrape.jsonx`), text helpers (`bitscrape.textutil`, `el.clean_text()`, `el.price()`), DNS-over-HTTPS resolver (`dns_over_https=True`), browser-ready Docker image (`--target browsers`) |
+| **Distributed crawling** | Redis-backed queue + dedup filter, cross-worker-process politeness throttle, a Mercator-style priority `Frontier`, named multi-session routing with per-session cookies, proxies and persistent browser contexts, `follow()` session inheritance and block escalation (`docs/sessions.md`) |
 | **Extraction** | CSS/XPath selectors, URL canonicalization, SimHash near-duplicate detection, heuristic entity resolution |
 | **Search infrastructure** | PageRank/HITS link analysis, incremental recrawl scheduling, BM25 + vector hybrid search with Reciprocal Rank Fusion, a knowledge-graph builder |
 | **Storage** | Pluggable backends — SQLite and S3 fully tested, PostgreSQL implemented, MongoDB/Elasticsearch as documented stubs |
@@ -255,7 +319,7 @@ reference), [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md).
 pytest -q
 ```
 
-Expect `440 passed`. A handful of tests need a local Redis on port 6390 and
+Expect `659 passed`. A handful of tests need a local Redis on port 6390 and
 a local PostgreSQL server (database `bitscrape_test`, user/password
 `postgres`/`postgres`) —
 if it's not running, only those specific tests fail, everything else still

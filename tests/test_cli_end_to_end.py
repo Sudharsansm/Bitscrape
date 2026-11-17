@@ -248,6 +248,169 @@ def test_genspider_the_generated_file_is_actually_valid_python(tmp_path, monkeyp
     compile(spider_file.read_text(), str(spider_file), "exec")
 
 
+def test_genspider_creates_xmlfeed_template(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["genspider", "newsfeed", "example.com", "--template", "xmlfeed"]
+    )
+    assert result.exit_code == 0, result.output
+    spider_file = tmp_path / "spiders" / "newsfeed.py"
+    content = spider_file.read_text()
+    assert "XMLFeedSpider" in content
+    compile(content, str(spider_file), "exec")
+
+
+def test_genspider_creates_csvfeed_template(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["genspider", "prices", "example.com", "--template", "csvfeed"]
+    )
+    assert result.exit_code == 0, result.output
+    spider_file = tmp_path / "spiders" / "prices.py"
+    content = spider_file.read_text()
+    assert "CSVFeedSpider" in content
+    compile(content, str(spider_file), "exec")
+
+
+def test_genspider_creates_shopify_template(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["genspider", "myshop", "myshop.myshopify.com", "--template", "shopify"]
+    )
+    assert result.exit_code == 0, result.output
+    spider_file = tmp_path / "spiders" / "myshop.py"
+    content = spider_file.read_text()
+    assert "ShopifySpider" in content
+    assert "myshop.myshopify.com" in content
+    compile(content, str(spider_file), "exec")
+
+
+def test_genspider_updated_sitemap_template_uses_sitemapspider(tmp_path, monkeypatch):
+    """The sitemap template used to hand-roll `loc::text` CSS on the raw
+    XML (no sitemap-index or gzip support); it now generates a real
+    SitemapSpider subclass."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["genspider", "sitemapper2", "example.com", "--template", "sitemap"]
+    )
+    assert result.exit_code == 0, result.output
+    content = (tmp_path / "spiders" / "sitemapper2.py").read_text()
+    assert "SitemapSpider" in content
+    compile(content, str((tmp_path / "spiders" / "sitemapper2.py")), "exec")
+
+
+# ---------------------------------------------------------------------------
+# bitscrape shell
+# ---------------------------------------------------------------------------
+
+
+def test_shell_fetches_and_reports_status(monkeypatch):
+    """The shell command fetches the URL and reports status before handing
+    off to an interactive prompt -- verify the fetch + report half without
+    actually needing a real interactive TTY. We stub out the interactive
+    part (IPython/code.interact) since CliRunner has no real terminal."""
+    server = _ThreadedTestServer(body=b"hello from shell test")
+    try:
+        import bitscrape.cli.main as main_module
+
+        started = {}
+
+        def fake_start_ipython(argv, user_ns, display_banner):
+            started["called"] = True
+            started["namespace"] = user_ns
+
+        monkeypatch.setattr(
+            "IPython.start_ipython", fake_start_ipython, raising=False
+        )
+        # IPython may not be importable at all in some environments -- patch
+        # the import site bitscrape actually uses.
+        import types
+
+        fake_ipython_module = types.SimpleNamespace(start_ipython=fake_start_ipython)
+        monkeypatch.setitem(__import__("sys").modules, "IPython", fake_ipython_module)
+
+        runner = CliRunner()
+        result = runner.invoke(main_module.cli, ["shell", server.url])
+
+        assert result.exit_code == 0, result.output
+        assert "Fetched" in result.output
+        assert started.get("called") is True
+        assert "response" in started["namespace"]
+        assert started["namespace"]["response"].status == 200
+        assert started["namespace"]["response"].body == b"hello from shell test"
+    finally:
+        server.close()
+
+
+def test_shell_namespace_includes_view_and_from_curl(monkeypatch):
+    """view() and from_curl() -- the shell's answers to Scrapling's "view
+    results in your browser" and "convert curl to a request" features."""
+    server = _ThreadedTestServer(body=b"<html><body>hi</body></html>")
+    try:
+        import bitscrape.cli.main as main_module
+        import types
+
+        started = {}
+
+        def fake_start_ipython(argv, user_ns, display_banner):
+            started["namespace"] = user_ns
+
+        fake_ipython_module = types.SimpleNamespace(start_ipython=fake_start_ipython)
+        monkeypatch.setitem(__import__("sys").modules, "IPython", fake_ipython_module)
+
+        opened = {}
+        monkeypatch.setattr(
+            "webbrowser.open", lambda target: opened.setdefault("target", target)
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(main_module.cli, ["shell", server.url])
+        assert result.exit_code == 0, result.output
+
+        namespace = started["namespace"]
+        assert "view" in namespace
+        assert "from_curl" in namespace
+
+        namespace["view"]()
+        assert opened["target"].startswith("file://")
+
+        req = namespace["from_curl"]("curl 'https://example.com/x' -H 'Accept: text/html'")
+        assert req.url == "https://example.com/x"
+        assert req.headers["Accept"] == "text/html"
+    finally:
+        server.close()
+
+
+def test_shell_falls_back_to_stdlib_shell_without_ipython(monkeypatch):
+    server = _ThreadedTestServer()
+    try:
+        import bitscrape.cli.main as main_module
+
+        # Simulate IPython not being installed.
+        monkeypatch.setitem(__import__("sys").modules, "IPython", None)
+
+        interacted = {}
+
+        def fake_interact(local):
+            interacted["local"] = local
+
+        monkeypatch.setattr("code.interact", fake_interact)
+
+        runner = CliRunner()
+        result = runner.invoke(main_module.cli, ["shell", server.url])
+
+        assert result.exit_code == 0, result.output
+        assert "IPython not installed" in result.output
+        assert interacted.get("local") is not None
+        assert "response" in interacted["local"]
+    finally:
+        server.close()
+
+
 # ---------------------------------------------------------------------------
 # bitscrape startproject
 # ---------------------------------------------------------------------------
@@ -294,7 +457,7 @@ def test_cli_help_lists_all_commands():
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    for command in ["crawl", "list", "genspider", "startproject"]:
+    for command in ["crawl", "list", "genspider", "startproject", "get", "shell"]:
         assert command in result.output
 
 
@@ -303,3 +466,74 @@ def test_cli_version_flag():
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
     assert "bitscrape" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# get (one-shot fetch, no spider/shell needed)
+# ---------------------------------------------------------------------------
+
+_GET_TEST_HTML = (
+    b"<html><body><h1>Hello World</h1><p>Some real content here.</p>"
+    b'<script type="application/ld+json">{"@type": "Thing", "name": "X"}</script>'
+    b"</body></html>"
+)
+
+
+def test_get_default_prints_markdown():
+    server = _ThreadedTestServer(body=_GET_TEST_HTML)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["get", server.url])
+        assert result.exit_code == 0, result.output
+        assert "# Hello World" in result.output
+        assert "Some real content here." in result.output
+    finally:
+        server.close()
+
+
+def test_get_as_html_prints_raw_markup():
+    server = _ThreadedTestServer(body=_GET_TEST_HTML)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["get", server.url, "--as", "html"])
+        assert result.exit_code == 0, result.output
+        assert "<h1>Hello World</h1>" in result.output
+    finally:
+        server.close()
+
+
+def test_get_as_text_strips_tags():
+    server = _ThreadedTestServer(body=_GET_TEST_HTML)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["get", server.url, "--as", "text"])
+        assert result.exit_code == 0, result.output
+        assert "<h1>" not in result.output
+        assert "Hello World" in result.output
+        assert "Some real content here." in result.output
+    finally:
+        server.close()
+
+
+def test_get_as_structured_prints_json_ld():
+    server = _ThreadedTestServer(body=_GET_TEST_HTML)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["get", server.url, "--as", "structured"])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output)
+        assert payload["json_ld"][0]["name"] == "X"
+    finally:
+        server.close()
+
+
+def test_get_with_css_selector_extracts_only_that():
+    server = _ThreadedTestServer(body=_GET_TEST_HTML)
+    try:
+        runner = CliRunner()
+        result = runner.invoke(cli, ["get", server.url, "--css", "h1::text"])
+        assert result.exit_code == 0, result.output
+        assert result.output.strip() == "Hello World"
+        assert "Some real content" not in result.output
+    finally:
+        server.close()

@@ -124,6 +124,67 @@ a real ANN vector backend (FAISS, pgvector, a hosted vector DB) — the
 fusion/reranking logic in this module doesn't care which backend produced
 the ranked lists it's combining.
 
+## RAG pipeline
+
+`bitscrape.rag.RagPipeline` ties `html_to_markdown` + `chunk_markdown` +
+the BM25/vector/RRF pieces above into one object, instead of wiring them
+together by hand every time:
+
+```python
+from bitscrape.rag import RagPipeline
+
+pipeline = RagPipeline()                     # BM25-only; pass embed_fn for hybrid
+pipeline.ingest_response(response)           # from a spider callback
+pipeline.ingest_html(html, url="https://...")  # or straight from HTML
+
+results = pipeline.search("what does the pricing page say?")
+context = pipeline.to_context(results)       # ready to paste into an LLM prompt
+```
+
+Same scope note as `HybridSearcher` above: embeddings are bring-your-own.
+Without `embed_fn`, `search()` is real BM25 lexical search (not a
+degraded mode you need to work around) — most keyword-search use cases
+don't need vectors at all.
+
+## MCP server (AI agent integration)
+
+`bitscrape mcp` runs an MCP server exposing four tools an AI agent
+(Claude Desktop, Cursor, etc.) can call directly: `fetch` (URL → clean
+Markdown), `extract_structured` (JSON-LD/Microdata/RDFa/OpenGraph/meta/
+links as JSON), `search` (hybrid search, via `RagPipeline`, over
+everything fetched through the server so far), and `screenshot`
+(base64-encoded PNG).
+
+```bash
+pip install bitscrape[mcp]
+bitscrape mcp                 # stdio transport, for Claude Desktop/Cursor config
+```
+
+Point your MCP client's config at the `bitscrape mcp` command (stdio is
+what Claude Desktop and Cursor expect) and the four tools above become
+available to the agent.
+
+**Deliberately excluded**: any stealth/anti-bot-bypass fetch mode.
+`bitscrape.mcp_server.build_server()` constructs its own internal
+`Settings` and forces `impersonate=None` / `browser_stealth=False` /
+`dns_leak_protection=False` regardless of what's passed in — an AI-facing
+surface that could reach for evasion tooling on an agent's behalf would
+be a worse version of the same non-goal covered in
+[security/](../security/index.md).
+
+**Prompt-injection handling, scoped honestly**: content reaching the agent
+goes through `html_to_markdown(strip_hidden=True)`, which drops elements
+hidden via `display:none`/`aria-hidden`/zero-size fonts/off-screen
+positioning — a real, tested defense against the common "invisible
+instructions for the AI" pattern (see
+`tests/test_mcp_server.py::test_fetch_returns_clean_markdown_and_strips_hidden_injection_text`).
+Output is also length-capped so a page can't blow out the agent's context
+window. This is not a claim that all injection is caught: visible page
+text is still passed through as visible text, since silently rewriting or
+dropping arbitrary visible content would make the tool useless for
+scraping. Treat fetched content the way you'd treat any other untrusted
+input reaching a model.
+
 ## Knowledge graph
 
 `bitscrape.knowledge_graph.KnowledgeGraph` records (subject, predicate,
@@ -178,4 +239,5 @@ kg.export_graphml("graph.graphml")   # open directly in Gephi/Cytoscape
 
 - [extractors/](../extractors/index.md) — canonicalization and entity resolution primitives that feed into this.
 - [architecture/](../architecture/index.md) — how this fits alongside the rest of the crawl pipeline.
+- [security/](../security/index.md) — why stealth/anti-bot bypass is out of scope everywhere in this project, including the MCP server.
 - [api/index.md#link-analysis-bitscrapelink_analysis](../api/index.md#link-analysis-bitscrapelink_analysis), [#incremental-recrawl-bitscraperecrawl](../api/index.md#incremental-recrawl-bitscraperecrawl), [#ranking-bitscraperanking](../api/index.md#ranking-bitscraperanking), [#knowledge-graph-bitscrapeknowledge_graph](../api/index.md#knowledge-graph-bitscrapeknowledge_graph) — full signatures.

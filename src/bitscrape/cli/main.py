@@ -4,7 +4,10 @@ Bitscrape CLI
 Commands:
   bitscrape crawl <spider>  [-o output] [--fmt jsonl|json|csv|xml]
   bitscrape startproject <name>
-  bitscrape genspider <name> <domain>
+  bitscrape genspider <name> <domain> [--template basic|crawl|sitemap|xmlfeed|csvfeed|shopify]
+  bitscrape shell <url>  [--playwright]
+  bitscrape get <url>  [--playwright] [--as markdown|html|text|structured] [--css SELECTOR]
+  bitscrape mcp  [--transport stdio|sse|streamable-http]
   bitscrape list
   bitscrape version
 """
@@ -195,21 +198,278 @@ def startproject(name: str) -> None:
 @cli.command()
 @click.argument("name")
 @click.argument("domain")
-@click.option("--template", default="basic", type=click.Choice(["basic", "crawl", "sitemap"]))
+@click.option(
+    "--template",
+    default="basic",
+    type=click.Choice(["basic", "crawl", "sitemap", "xmlfeed", "csvfeed", "shopify"]),
+)
 def genspider(name: str, domain: str, template: str) -> None:
     """Generate a spider template."""
     dest = Path("spiders") / f"{name}.py"
     dest.parent.mkdir(exist_ok=True)
 
-    if template == "basic":
-        code = _BASIC_TEMPLATE.format(name=name, domain=domain)
-    elif template == "crawl":
-        code = _CRAWL_TEMPLATE.format(name=name, domain=domain)
-    else:
-        code = _SITEMAP_TEMPLATE.format(name=name, domain=domain)
+    templates = {
+        "basic": _BASIC_TEMPLATE,
+        "crawl": _CRAWL_TEMPLATE,
+        "sitemap": _SITEMAP_TEMPLATE,
+        "xmlfeed": _XMLFEED_TEMPLATE,
+        "csvfeed": _CSVFEED_TEMPLATE,
+        "shopify": _SHOPIFY_TEMPLATE,
+    }
+    code = templates[template].format(name=name, domain=domain)
 
     dest.write_text(code)
     console.print(f"[green]Created[/green] {dest}")
+
+
+@cli.command()
+@click.argument("url")
+@click.option("--playwright", is_flag=True, help="Render with a headless browser first.")
+def shell(url: str, playwright: bool) -> None:
+    """Fetch URL, then drop into an interactive shell with `response`/`r`
+    (a ParsedResponse) already loaded, plus a `fetch(url)` helper to load
+    another page in the same session without leaving the shell."""
+    from bitscrape.core.models import Request
+    from bitscrape.core.settings import Settings
+    from bitscrape.curlparse import curl_to_request
+    from bitscrape.downloader.downloader import Downloader
+    from bitscrape.parser.selector import ParsedResponse
+
+    settings = Settings()
+    downloader = Downloader(settings)
+
+    async def _fetch(target_url: str) -> ParsedResponse:
+        await downloader.open()
+        try:
+            resp = await downloader.fetch(Request(url=target_url, use_playwright=playwright))
+        finally:
+            await downloader.close()
+        return ParsedResponse(resp)
+
+    def fetch(target_url: str) -> ParsedResponse:
+        """Fetch another URL from within the shell; returns a ParsedResponse."""
+        return asyncio.run(_fetch(target_url))
+
+    def view(target: ParsedResponse | None = None) -> None:
+        """Open a fetched response's HTML in your actual browser for visual
+        inspection -- defaults to the most recently fetched `response`."""
+        import tempfile
+        import webbrowser
+
+        target = target if target is not None else response
+        with tempfile.NamedTemporaryFile("wb", suffix=".html", delete=False) as f:
+            f.write(target.body)
+            path = f.name
+        webbrowser.open(f"file://{path}")
+        console.print(f"[dim]Opened {path} in your browser[/dim]")
+
+    def from_curl(curl_command: str) -> Request:
+        """Paste a browser's "Copy as cURL" output; returns a Request you
+        can inspect or pass to `fetch`-equivalent code -- e.g.
+        `r2 = asyncio.run(_fetch(from_curl(cmd).url))` for a same-URL
+        refetch, or build your own downloader call for the full method/
+        headers/body."""
+        return curl_to_request(curl_command)
+
+    response = asyncio.run(_fetch(url))
+    namespace = {
+        "response": response,
+        "r": response,
+        "fetch": fetch,
+        "view": view,
+        "from_curl": from_curl,
+        "Request": Request,
+        "Settings": Settings,
+    }
+    console.print(
+        f"[green]Fetched[/green] {url} "
+        f"[dim](status={response.status}, {len(response.body)} bytes)[/dim]"
+    )
+    console.print("[dim]Variables: response / r, fetch(url), view(), from_curl(cmd)[/dim]")
+
+    try:
+        from IPython import start_ipython
+
+        start_ipython(argv=[], user_ns=namespace, display_banner=False)
+    except ImportError:
+        console.print(
+            "[yellow]IPython not installed — falling back to the standard Python "
+            "shell. Install with `pip install bitscrape[cli]` for the full "
+            "interactive experience (tab completion, syntax highlighting).[/yellow]"
+        )
+        import code
+
+        code.interact(local=namespace)
+
+
+# ---------------------------------------------------------------------------
+# get
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.argument("url")
+@click.option("--playwright", is_flag=True, help="Render with a headless browser first.")
+@click.option(
+    "--as",
+    "output_as",
+    default="markdown",
+    type=click.Choice(["markdown", "html", "text", "structured"]),
+    help="What to print: clean Markdown (default), raw HTML, plain text, or "
+    "structured data (JSON-LD/Microdata/RDFa/OpenGraph) as JSON.",
+)
+@click.option("--css", default=None, help="CSS selector to extract instead of the whole page.")
+def get(url: str, playwright: bool, output_as: str, css: str | None) -> None:
+    """Fetch URL and print the result -- no spider, no shell, just the
+    content. `bitscrape get https://example.com --css 'h1::text'`"""
+    from bitscrape.core.models import Request
+    from bitscrape.core.settings import Settings
+    from bitscrape.downloader.downloader import Downloader
+    from bitscrape.markdown import html_to_markdown
+    from bitscrape.parser.selector import ParsedResponse
+    from bitscrape.parser.structured import extract_structured
+
+    async def _run() -> None:
+        downloader = Downloader(Settings())
+        await downloader.open()
+        try:
+            response = await downloader.fetch(Request(url=url, use_playwright=playwright))
+        finally:
+            await downloader.close()
+
+        if css:
+            parsed = ParsedResponse(response)
+            for value in parsed.css(css).getall():
+                print(value)
+            return
+
+        if output_as == "html":
+            print(response.text)
+        elif output_as == "text":
+            import re
+
+            from bitscrape.content import find_main_content, parse_html, strip_noise
+
+            root = strip_noise(parse_html(response.body))
+            main = find_main_content(root)
+            text = re.sub(r"\s+", " ", " ".join(main.itertext())).strip()
+            print(text)
+        elif output_as == "structured":
+            import json
+
+            data = extract_structured(response.body, base_url=response.url)
+            print(json.dumps(data.to_dict(), indent=2, ensure_ascii=False))
+        else:
+            print(html_to_markdown(response.body, base_url=response.url))
+
+    asyncio.run(_run())
+
+
+@cli.command()
+@click.option(
+    "--transport",
+    default="stdio",
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
+    help="stdio is what Claude Desktop/Cursor expect in their MCP server config.",
+)
+@click.option("--name", default="bitscrape", help="Server name reported to the MCP client.")
+@click.option(
+    "--host", default="127.0.0.1", show_default=True, help="HTTP transports: bind address."
+)
+@click.option("--port", default=8000, show_default=True, type=int, help="HTTP transports: port.")
+@click.option(
+    "--auth-token",
+    envvar="BITSCRAPE_MCP_TOKEN",
+    default=None,
+    help="HTTP transports: require 'Authorization: Bearer <token>' (or set BITSCRAPE_MCP_TOKEN). "
+    "Required to bind a non-loopback host.",
+)
+@click.option(
+    "--cdp-url", default=None, help="Attach browser sessions to a running browser over CDP."
+)
+@click.option(
+    "--allow-private-networks", is_flag=True, help="Permit loopback/private/link-local targets."
+)
+@click.option(
+    "--no-block-ads", is_flag=True, help="Don't block ad/tracker domains in browser sessions."
+)
+@click.option("--max-sessions", default=4, show_default=True, type=int)
+def mcp(
+    transport: str,
+    name: str,
+    host: str,
+    port: int,
+    auth_token: str | None,
+    cdp_url: str | None,
+    allow_private_networks: bool,
+    no_block_ads: bool,
+    max_sessions: int,
+) -> None:
+    """Run bitscrape's MCP server (fetch / extract / browser sessions / network
+    history tools for AI agents -- see bitscrape.mcp_server)."""
+    try:
+        from bitscrape.mcp_server import build_server, run_http
+    except ImportError:
+        console.print(
+            "[red]The `mcp` package isn't installed.[/red] Install with "
+            "`pip install bitscrape[mcp]`."
+        )
+        raise SystemExit(1) from None
+
+    server = build_server(
+        name=name,
+        cdp_url=cdp_url,
+        allow_private_networks=allow_private_networks,
+        block_ads=not no_block_ads,
+        max_sessions=max_sessions,
+    )
+    if transport == "stdio":
+        server.run(transport="stdio")
+        return
+    try:
+        run_http(server, host=host, port=port, token=auth_token, transport=transport)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise SystemExit(2) from None
+
+
+# ---------------------------------------------------------------------------
+# blocklist
+# ---------------------------------------------------------------------------
+
+
+@cli.group()
+def blocklist() -> None:
+    """Manage the ad/tracker domain list used by block_ads."""
+
+
+@blocklist.command("update")
+@click.option(
+    "--mode", type=click.Choice(["union", "intersection"]), default="union", show_default=True
+)
+@click.option(
+    "--dest", default=None, help="Output file (default ~/.cache/bitscrape/ad_domains.txt)."
+)
+def blocklist_update(mode: str, dest: str | None) -> None:
+    """Download community lists and save the merged ad/tracker domain list."""
+    from bitscrape.downloader.blocking import update_blocklist, user_blocklist_path
+
+    try:
+        n = update_blocklist(mode=mode, dest=dest)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[red]Update failed:[/red] {exc}")
+        raise SystemExit(1) from None
+    console.print(f"[green]Saved {n:,} domains[/green] to {dest or user_blocklist_path()}")
+
+
+@blocklist.command("info")
+def blocklist_info() -> None:
+    """Show how many domains block_ads currently uses, and from where."""
+    from bitscrape.downloader.blocking import load_ad_domains, user_blocklist_path
+
+    p = user_blocklist_path()
+    src = str(p) if p.is_file() else "bundled core list"
+    console.print(f"{len(load_ad_domains()):,} domains ({src})")
 
 
 # ---------------------------------------------------------------------------
@@ -301,19 +561,56 @@ class {name}Spider(Spider):
 """
 
 _SITEMAP_TEMPLATE = """\
-from bitscrape.core.spider import Spider
-from bitscrape.parser.selector import ParsedResponse
+from bitscrape.spiders import SitemapSpider
+from bitscrape.core.models import Response
 
 
-class {name}Spider(Spider):
+class {name}Spider(SitemapSpider):
     name = "{name}"
-    start_urls = ["https://{domain}/sitemap.xml"]
+    sitemap_urls = ["https://{domain}/sitemap.xml"]
+    # Route matched URLs to different callbacks by substring, e.g.:
+    # sitemap_rules = [("/product/", "parse_product")]
 
-    async def parse(self, response: ParsedResponse):
-        for url in response.css("loc::text").getall():
-            yield self.follow(url, callback="parse_page")
+    async def parse(self, response: Response):
+        yield {{"url": response.url, "title": response.css("title::text").get()}}
+"""
 
-    async def parse_page(self, response: ParsedResponse):
-        yield {{"url": response.url,
-               "title": response.css("title::text").get()}}
+_XMLFEED_TEMPLATE = """\
+from bitscrape.spiders import XMLFeedSpider
+
+
+class {name}Spider(XMLFeedSpider):
+    name = "{name}"
+    start_urls = ["https://{domain}/rss.xml"]
+    itertag = "item"  # "entry" for Atom feeds
+
+    async def parse_node(self, response, node):
+        yield {{"title": node.findtext("title"), "link": node.findtext("link")}}
+"""
+
+_CSVFEED_TEMPLATE = """\
+from bitscrape.spiders import CSVFeedSpider
+
+
+class {name}Spider(CSVFeedSpider):
+    name = "{name}"
+    start_urls = ["https://{domain}/feed.csv"]
+    # headers = ["sku", "price"]  # only needed if the CSV has no header row
+
+    async def parse_row(self, response, row):
+        yield row
+"""
+
+_SHOPIFY_TEMPLATE = """\
+from bitscrape.spiders import ShopifySpider
+
+
+class {name}Spider(ShopifySpider):
+    name = "{name}"
+    shop_urls = ["https://{domain}"]
+
+    # Override to customise the item shape (default: one flat dict per
+    # variant, with the shared product fields plus that variant's own):
+    # async def parse_variant(self, response, product, variant):
+    #     yield {{"sku": variant.get("sku"), "price": variant.get("price")}}
 """

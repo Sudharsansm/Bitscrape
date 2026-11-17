@@ -5,7 +5,6 @@ Run with: pytest tests/ -v
 
 from __future__ import annotations
 
-import asyncio
 import pytest
 
 from bitscrape.core.models import BaseItem, CrawlStats, Request, Response
@@ -19,7 +18,7 @@ from bitscrape.pipeline.pipelines import (
     ValidationPipeline,
 )
 from bitscrape.scheduler.dupefilter import MemoryDupeFilter, fingerprint
-from bitscrape.scheduler.scheduler import MemoryQueue, Scheduler
+from bitscrape.scheduler.scheduler import Scheduler
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -184,7 +183,6 @@ async def test_dedup_pipeline_drops_duplicates(dummy_spider):
 
 @pytest.mark.asyncio
 async def test_validation_pipeline_passes_valid(dummy_spider):
-    from pydantic import BaseModel
 
     class MyItem(BaseItem):
         name: str

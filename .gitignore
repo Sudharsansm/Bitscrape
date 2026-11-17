@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+# Environments
+.venv/
+venv/
+env/
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+site/
+# Bitscrape runtime state (crawl output, checkpoints, caches, adaptive DB)
+.bitscrape/
+*.sqlite
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

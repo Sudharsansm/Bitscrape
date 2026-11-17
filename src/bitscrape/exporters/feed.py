@@ -9,7 +9,6 @@ Supported formats: jsonl, json, csv, xml
 from __future__ import annotations
 
 import csv
-import json
 import logging
 import re
 import sys
@@ -20,6 +19,8 @@ from xml.sax.saxutils import escape as _xml_escape
 
 from pydantic import BaseModel
 
+from bitscrape import jsonx
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,6 +30,24 @@ def _item_to_dict(item: Any) -> dict[str, Any]:
     if isinstance(item, dict):
         return item
     raise TypeError(f"Cannot export item of type {type(item)}")
+
+
+def _dumps_line(d: dict[str, Any]) -> str:
+    """One compact JSON line, no trailing newline. Uses ``orjson`` (its own
+    docs claim, and independent benchmarks generally agree, on the order of
+    10x faster than the standard library for this shape of workload) when
+    it's installed (``pip install bitscrape[redis]`` or ``[all]`` currently
+    pulls it in as a side effect of the Redis extra; it has no dependency on
+    Redis itself, so installing just ``orjson`` directly works too) --
+    falls back to the standard library's ``json`` otherwise, so this never
+    becomes a hard dependency just to export items."""
+    return jsonx.dumps(d)
+
+
+def _dumps_array(items: list[dict[str, Any]]) -> str:
+    """Pretty-printed JSON array, same orjson-if-available/json-fallback
+    approach as :func:`_dumps_line`."""
+    return jsonx.dumps(items, indent=True)
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +88,7 @@ class JSONLExporter(BaseExporter):
     def export_item(self, item: Any) -> None:
         assert self._file is not None
         d = _item_to_dict(item)
-        self._file.write(json.dumps(d, ensure_ascii=False) + "\n")
+        self._file.write(_dumps_line(d) + "\n")
         self._count += 1
 
 
@@ -89,7 +108,7 @@ class JSONExporter(BaseExporter):
 
     def close(self) -> None:
         assert self._file is not None
-        json.dump(self._items, self._file, ensure_ascii=False, indent=2)
+        self._file.write(_dumps_array(self._items))
         super().close()
 
 

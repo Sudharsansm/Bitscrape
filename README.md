@@ -77,8 +77,10 @@ bitscrape.run(parse, settings=bitscrape.Settings(
   session pooling, JS rendering, distributed crawling, live monitoring,
   Prometheus metrics — all opt-in toggles, nothing extra loads unless you
   ask for it.
-- **Respects robots.txt and meta-robots by default**, and fails *safe*
-  (blocks) rather than *open* (allows) if robots.txt can't be fetched.
+- **Respects robots.txt and meta-robots by default** -- `Disallow`/`Allow`
+  (with wildcards), `Crawl-delay`, `Request-rate` (time-windowed), TTL-cached
+  per domain with stale-while-revalidate -- and fails *safe* (blocks) rather
+  than *open* (allows) if robots.txt can't be fetched (see `docs/robots.md`).
 - **Every documented feature has a real test behind it** — a real local
   Redis, a real local HTTP server, a real on-disk SQLite database, a real
   S3 API emulation, real Prometheus/OpenTelemetry libraries. Where
@@ -91,9 +93,13 @@ bitscrape.run(parse, settings=bitscrape.Settings(
 
 | Area | What you get |
 |---|---|
-| **Crawling** | Async fetching (`aiohttp`), retries with `Retry-After` support, conditional GET, robots.txt + meta-robots compliance, redirect-loop detection |
-| **JS rendering** | Playwright integration, pooled browser reuse, infinite-scroll helper |
-| **Distributed crawling** | Redis-backed queue + dedup filter, cross-worker-process politeness throttle, a Mercator-style priority `Frontier` |
+| **Crawling** | Async fetching (`aiohttp`), retries with `Retry-After` support, conditional GET, robots.txt (Disallow/Allow/Crawl-delay/Request-rate, cached) + meta-robots compliance, redirect-loop detection, adaptive autothrottle (latency-tuned per-domain delay, doubles on blocks, honours `Retry-After`, recovers on its own), proxy rotation, dev-mode response caching/replay, blocked-request detection + retry |
+| **JS rendering** | Playwright integration, pooled browser reuse, infinite-scroll helper, CDP remote-browser connect, persistent profiles, background XHR/fetch capture, **`record_requests` network history** (searchable, bounded, HAR export), **saved login state** (`save_state`/`load_state`), **shadow-DOM piercing**, ad/domain/resource-type blocking with a bundled ~3,900-domain list (`bitscrape blocklist update` for ~100k) — see [docs/network-and-state.md](docs/network-and-state.md), [docs/blocking-and-dns.md](docs/blocking-and-dns.md) |
+| **Spider templates** | `CrawlSpider` + `Rule` + `LinkExtractor` (rule-based link following, `allowed_domains` enforced by `OffsiteMiddleware`), `SitemapSpider` (sitemap **or robots.txt**-driven, gzip + sitemap indexes, hreflang alternates), `XMLFeedSpider` (namespace-safe, RSS/Atom), `CSVFeedSpider`, `ShopifySpider` (paginated `/products.json`, one item per variant, deduped), `SiteToMarkdownSpider` / `ContentSpider` (whole site → LLM-ready Markdown) — see [docs/spider-templates.md](docs/spider-templates.md) |
+| **Export formats** | 17 built-in formats — JSON, JSONL, CSV, XML, YAML, TOML, INI, Markdown, MessagePack, BSON, Protobuf, Parquet, ORC, Avro, WARC, PDF, Word (`.docx`) — through one `get_exporter()`, the CLI's `--format`, or in-memory as `result.items.to_json()` / `.to_parquet()` / ... via `ItemList` (`Settings.collect_items=True`) — see [docs/exporters.md](docs/exporters.md) |
+| **AI / RAG integration** | `RagPipeline` (markdown → chunking → BM25/hybrid search, one object), MCP server (`bitscrape mcp`: 14 tools incl. persistent browser sessions, saved logins, network-history search, SSRF guard, bearer-auth HTTP transport — [docs/mcp.md](docs/mcp.md)), a bundled [Agent Skill](agent-skill/SKILL.md) for coding agents |
+| **Developer experience** | `bitscrape get <url>` (one-shot fetch, no spider needed), `bitscrape shell <url>` (IPython REPL with `fetch()`/`view()`/`from_curl()`), `Fetcher`/`AsyncFetcher`/`FetcherSession` for direct HTTP requests (optional real HTTP/2 via `httpx`, no fingerprint impersonation — see [docs/fetchers.md](docs/fetchers.md)), `DynamicFetcher`/`DynamicSession` for JavaScript-driven pages through a real browser (Playwright Chromium, installed Chrome, or a running browser over CDP; hooks, waits, scrolling, XHR capture, authenticated proxies, no stealth patching — see [docs/dynamic-fetcher.md](docs/dynamic-fetcher.md)), sync `bitscrape.fetch_url()` / `bitscrape.run()`, `orjson`-accelerated JSON everywhere (`bitscrape.jsonx`), text helpers (`bitscrape.textutil`, `el.clean_text()`, `el.price()`), DNS-over-HTTPS resolver (`dns_over_https=True`), browser-ready Docker image (`--target browsers`) |
+| **Distributed crawling** | Redis-backed queue + dedup filter, cross-worker-process politeness throttle, a Mercator-style priority `Frontier`, named multi-session routing with per-session cookies, proxies and persistent browser contexts, `follow()` session inheritance and block escalation (`docs/sessions.md`) |
 | **Extraction** | CSS/XPath selectors, URL canonicalization, SimHash near-duplicate detection, heuristic entity resolution |
 | **Search infrastructure** | PageRank/HITS link analysis, incremental recrawl scheduling, BM25 + vector hybrid search with Reciprocal Rank Fusion, a knowledge-graph builder |
 | **Storage** | Pluggable backends — SQLite and S3 fully tested, PostgreSQL implemented, MongoDB/Elasticsearch as documented stubs |
@@ -149,7 +155,7 @@ reference), [`ROADMAP.md`](ROADMAP.md), [`CHANGELOG.md`](CHANGELOG.md).
 pytest -q
 ```
 
-Expect `440 passed`. A handful of tests need a local Redis on port 6390 and
+Expect `659 passed`. A handful of tests need a local Redis on port 6390 and
 a local PostgreSQL server (database `bitscrape_test`, user/password
 `postgres`/`postgres`) —
 if it's not running, only those specific tests fail, everything else still

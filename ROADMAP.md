@@ -48,6 +48,10 @@ concrete, stated reasons rather than a blanket policy:
 - **Bot-detection evasion**: browser/TLS fingerprint spoofing, canvas/WebGL
   spoofing, mouse/keystroke simulation designed to mimic human behavior.
   Same reasoning as above.
+- **Resolver locking / WebRTC suppression (`dns_leak_protection`).** Its
+  purpose is hiding proxied traffic from sites. Plain **DNS-over-HTTPS**
+  (`dns_over_https=True`) *is* implemented -- it is a privacy feature that
+  doesn't change what the target sees.
 - **An "anti-bot" plugin category** of any kind, regardless of framing
   (defensive testing, simulation, incremental requests that add up to the
   same capability).

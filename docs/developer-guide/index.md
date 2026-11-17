@@ -32,7 +32,7 @@ sudo -u postgres createdb bitscrape_test
 pytest -q
 ```
 
-Expect `440 passed`. If Redis isn't running, only the handful of tests
+Expect `659 passed`. If Redis isn't running, only the handful of tests
 that specifically need it will fail — everything else still passes. Run a
 single file or test:
 

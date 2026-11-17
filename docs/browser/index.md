@@ -111,21 +111,37 @@ selected.
 
 ## Limitations / honest disclosure
 
-- This project's automated tests exercise the Playwright *code paths*
-  (context/page interaction, scroll logic, pool concurrency bounding)
-  against fake-but-API-shaped Playwright objects, since no real browser
-  binary was available to download in the environment this was built in
-  (no network access to Playwright's CDN). The pooling and scroll logic
-  itself is genuinely tested; a real end-to-end render against a real
-  browser has not been run as part of this project's own test suite —
-  run your own smoke test against a real page after
-  `playwright install chromium` before depending on this in production.
+- **What is tested against a real browser.** `tests/test_dynamic_fetcher.py`
+  drives a real Chromium (141, in the environment it was developed in):
+  JavaScript rendering, `wait_selector` and its states, `page_action` /
+  `page_setup` hooks, infinite scroll, screenshots, XHR capture (including
+  bodies still streaming), cookies, `storage_state`, persistent profiles,
+  `cdp_url`, `executable_path`, resource and domain blocking, authenticated
+  proxies (against a real authenticating proxy), failure modes, and process
+  cleanup -- through `DynamicFetcher`, through `BrowserSession` in a spider,
+  and through the legacy `use_playwright=True` path (pooled and unpooled).
+  Building those tests found three bugs the earlier fake-based tests had
+  hidden (a streaming XHR body recorded as `None`; authenticated proxy URLs
+  failing with a 407; browser failures taking a spider's "unexpected error"
+  path), plus two in the pool (the `browser_channel` / `browser_executable_path`
+  / `browser_args` settings were ignored when pooling, and a failed start
+  leaked browsers). Those tests skip themselves where no Chromium can be
+  launched, so a machine without `playwright install` still runs the rest of
+  the suite; CI installs Chromium so they run there.
+- **What is not verified.** Genuine **Google Chrome** (`real_chrome=True`):
+  in the environment this was developed in, the `chrome` channel resolved to
+  a symlink to Playwright's Chromium, so only the plumbing was exercised, not
+  Chrome-specific behaviour. Also untested: Firefox and WebKit
+  (`browser="firefox"`), headed mode (`headless=False`), SOCKS proxies, and
+  anything on Windows or macOS. Smoke-test those yourself before depending on
+  them.
 - Playwright adds meaningful latency and memory overhead per request
   compared to the `aiohttp` path — use it only for pages that actually need
   JS execution, not as a default.
 
 ## See also
 
+- [dynamic-fetcher.md](../dynamic-fetcher.md) — `DynamicFetcher`: fetch a JavaScript-driven page directly, with hooks, waits, XHR capture, proxies, and a choice of Chromium / Chrome / CDP.
 - [architecture/](../architecture/index.md) — where the Playwright path fits in the Downloader.
 - [tutorials/](../tutorials/index.md) — Tutorial 3 (JS rendering) worked example.
 - [api/index.md#downloader-bitscrapedownloaderdownloader](../api/index.md#downloader-bitscrapedownloaderdownloader) — full `BrowserPool`/`scroll_to_bottom` signatures.

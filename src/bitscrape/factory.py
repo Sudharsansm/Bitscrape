@@ -40,6 +40,7 @@ from bitscrape.middleware.middleware import (
     CookieMiddleware,
     DistributedThrottleMiddleware,
     MetaRobotsMiddleware,
+    OffsiteMiddleware,
     ProxyMiddleware,
     RobotsMiddleware,
     SessionPoolMiddleware,
@@ -53,14 +54,18 @@ logger = logging.getLogger(__name__)
 def build_middlewares(settings: Settings, redis_client: Any = None) -> list[BaseMiddleware]:
     """
     Assembles the middleware stack from Settings toggles, in a fixed,
-    sensible order: UserAgent -> Proxy (if configured) -> Session/Cookie ->
-    DistributedThrottle (if enabled) -> MetaRobots -> Robots (if obeyed).
+    sensible order: Offsite -> UserAgent -> Proxy (if configured) ->
+    Session/Cookie -> DistributedThrottle (if enabled) -> MetaRobots ->
+    Robots (if obeyed).
 
     Exposed as a standalone function (not just an internal detail of
     ``build_engine``) so you can inspect or extend the stack without
     re-implementing the selection logic.
     """
-    middlewares: list[BaseMiddleware] = [UserAgentMiddleware()]
+    # Always first, and always installed: a no-op while spider.allowed_domains
+    # is empty, but when it's set an offsite request is rejected before
+    # anything else (robots.txt, sessions, proxy selection) does work on it.
+    middlewares: list[BaseMiddleware] = [OffsiteMiddleware(), UserAgentMiddleware()]
 
     if settings.proxies:
         middlewares.append(
@@ -90,7 +95,16 @@ def build_middlewares(settings: Settings, redis_client: Any = None) -> list[Base
     middlewares.append(MetaRobotsMiddleware())
 
     if settings.robotstxt_obey:
-        middlewares.append(RobotsMiddleware())
+        from bitscrape.middleware.robots import RobotsCache
+
+        robots_cache = RobotsCache(
+            cache_ttl=settings.robots_cache_ttl,
+            negative_ttl=settings.robots_negative_cache_ttl,
+            max_domains=settings.robots_max_cache_domains,
+            max_content_bytes=settings.robots_max_content_bytes,
+            timeout=settings.robots_timeout,
+        )
+        middlewares.append(RobotsMiddleware(robots_cache))
 
     return middlewares
 

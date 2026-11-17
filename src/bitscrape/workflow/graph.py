@@ -59,7 +59,7 @@ def build_crawl_graph(engine: Any) -> Any:
     # Node: fetch
     # ------------------------------------------------------------------
     async def fetch_node(state: CrawlState) -> CrawlState:
-        url = state["request_url"]
+        url = state.get("request_url", "")
         logger.debug("[workflow] fetch: %s", url)
         try:
             from bitscrape.core.models import Request
@@ -82,16 +82,16 @@ def build_crawl_graph(engine: Any) -> Any:
     async def parse_node(state: CrawlState) -> CrawlState:
         if state.get("error"):
             return state
-        logger.debug("[workflow] parse: %s", state["request_url"])
+        logger.debug("[workflow] parse: %s", state.get("request_url", ""))
         from bitscrape.core.models import Request, Response
         from bitscrape.core.spider import _current_response_var
         from bitscrape.parser.selector import ParsedResponse
 
-        req = Request(url=state["request_url"])
+        req = Request(url=state.get("request_url", ""))
         resp = Response(
-            url=state["request_url"],
-            status=state["response_status"],
-            body=state["response_body"],
+            url=state.get("request_url", ""),
+            status=state.get("response_status", 0),
+            body=state.get("response_body", b""),
             request=req,
         )
         pr = ParsedResponse(resp)

@@ -58,49 +58,6 @@ from typing import Any
 # ── Pydantic helpers ───────────────────────────────────────────────────────
 from pydantic import Field
 
-# ── Core models ────────────────────────────────────────────────────────────
-from bitscrape.core.models import BaseItem, CrawlStats, Request, Response
-from bitscrape.core.settings import Settings
-from bitscrape.core.spider import Spider
-
-# ── Engine ─────────────────────────────────────────────────────────────────
-from bitscrape.engine import Engine
-
-# ── Exporters ──────────────────────────────────────────────────────────────
-from bitscrape.exporters.feed import (
-    BaseExporter,
-    CSVExporter,
-    JSONExporter,
-    JSONLExporter,
-    XMLExporter,
-    get_exporter,
-)
-
-# ── Middleware ─────────────────────────────────────────────────────────────
-from bitscrape.middleware.middleware import (
-    BaseMiddleware,
-    CookieMiddleware,
-    DistributedThrottleMiddleware,
-    MetaRobotsMiddleware,
-    MiddlewareManager,
-    ProxyMiddleware,
-    RobotsMiddleware,
-    SessionPoolMiddleware,
-    UserAgentMiddleware,
-)
-
-# ── Factory: one call to build a fully-wired Engine from Settings ─────────
-from bitscrape.factory import build_engine, build_middlewares
-
-# ── URL Frontier ───────────────────────────────────────────────────────────
-from bitscrape.frontier import Frontier
-
-# ── Link analysis (PageRank / HITS) ────────────────────────────────────────
-from bitscrape.link_analysis import LinkGraph
-
-# ── Incremental recrawling ─────────────────────────────────────────────────
-from bitscrape.recrawl import PageHistory, RecrawlScheduler
-
 # ── Canonicalization / dedup ───────────────────────────────────────────────
 from bitscrape.canonicalize import (
     ContentFingerprint,
@@ -111,20 +68,104 @@ from bitscrape.canonicalize import (
     resolve_redirect_chain,
 )
 
-# ── Semantic ranking (BM25 + vectors + fusion) ─────────────────────────────
-from bitscrape.ranking import (
-    BM25Index,
-    HybridSearcher,
-    HybridSearchResult,
-    VectorIndex,
-    reciprocal_rank_fusion,
-)
+# ── Core models ────────────────────────────────────────────────────────────
+from bitscrape.core.models import BaseItem, CrawlStats, Request, Response
+from bitscrape.core.settings import Settings
+from bitscrape.core.spider import Spider
+
+# ── Crawl rules / link extraction ──────────────────────────────────────────
+from bitscrape.crawl.linkextract import LinkExtractor
+from bitscrape.crawl.rules import CrawlSpider, Rule
+from bitscrape.downloader.blocked import BlockedRequestDetector
+from bitscrape.downloader.blocking import DomainBlocker
+from bitscrape.downloader.devcache import DevModeCache
+
+# ── Proxy rotation / dev-mode cache / blocked-request detection ───────────
+from bitscrape.downloader.proxy import ProxyRotator
+from bitscrape.downloader.throttle import AutoThrottle
+
+# ── Engine ─────────────────────────────────────────────────────────────────
+from bitscrape.engine import Engine
 
 # ── Entity resolution ──────────────────────────────────────────────────────
 from bitscrape.entity_resolution import EntityResolver, similarity
 
+# ── Exporters ──────────────────────────────────────────────────────────────
+# JSON/JSONL/CSV/XML are the original set; bitscrape.exporters additionally
+# registers 13 more formats (Parquet, ORC, Avro, YAML, TOML, INI, Protobuf,
+# MessagePack, BSON, Markdown, WARC, PDF, Word) into the same get_exporter()
+# dispatch used here and by the CLI -- see docs/exporters.md.
+from bitscrape.exporters import (
+    AvroExporter,
+    BaseExporter,
+    BSONExporter,
+    CSVExporter,
+    DocxExporter,
+    INIExporter,
+    JSONExporter,
+    JSONLExporter,
+    MarkdownExporter,
+    MessagePackExporter,
+    ORCExporter,
+    ParquetExporter,
+    PDFExporter,
+    ProtobufExporter,
+    TOMLExporter,
+    WARCExporter,
+    XMLExporter,
+    YAMLExporter,
+    get_exporter,
+    response_to_item,
+)
+
+# ── Factory: one call to build a fully-wired Engine from Settings ─────────
+from bitscrape.factory import build_engine, build_middlewares
+
+# ── Direct HTTP requests without a spider (HTTP/1.1, optional HTTP/2) ──────
+from bitscrape.fetchers import (
+    AsyncDynamicFetcher,
+    AsyncDynamicSession,
+    AsyncFetcher,
+    AsyncFetcherSession,
+    BrowserLaunchError,
+    DynamicFetcher,
+    DynamicFetchError,
+    DynamicSession,
+    Fetcher,
+    FetchError,
+    FetcherSession,
+)
+
+# ── URL Frontier ───────────────────────────────────────────────────────────
+from bitscrape.frontier import Frontier
+
+# ── In-memory item collection (Settings.collect_items -> CrawlStats.items) ──
+from bitscrape.itemlist import ItemList
+
 # ── Knowledge graph ─────────────────────────────────────────────────────────
 from bitscrape.knowledge_graph import KnowledgeGraph, extract_entities
+
+# ── Link analysis (PageRank / HITS) ────────────────────────────────────────
+from bitscrape.link_analysis import LinkGraph
+
+# ── Middleware ─────────────────────────────────────────────────────────────
+from bitscrape.middleware.middleware import (
+    BaseMiddleware,
+    CookieMiddleware,
+    DistributedThrottleMiddleware,
+    MetaRobotsMiddleware,
+    MiddlewareManager,
+    OffsiteDrop,
+    OffsiteMiddleware,
+    ProxyMiddleware,
+    RobotsMiddleware,
+    SessionPoolMiddleware,
+    UserAgentMiddleware,
+)
+from bitscrape.middleware.robots import RobotsCache
+
+# ── Live monitoring dashboard (local JSON/HTML stats feed) ─────────────────
+from bitscrape.monitoring import StatsMonitor
 
 # ── Observability: metrics, tracing, structured logging, alerting ─────────
 from bitscrape.observability import (
@@ -132,27 +173,6 @@ from bitscrape.observability import (
     CrawlMetrics,
     CrawlTracer,
     JSONLogFormatter,
-)
-
-# ── Live monitoring dashboard (local JSON/HTML stats feed) ─────────────────
-from bitscrape.monitoring import StatsMonitor
-
-# ── Plugin system ──────────────────────────────────────────────────────────
-from bitscrape.plugins import (
-    BasePlugin,
-    BearerTokenAuthPlugin,
-    PluginManager,
-    StorageConnectorPlugin,
-)
-
-# ── Storage backends (SQLite/S3 fully supported; Postgres implemented but
-#    unverified against a live server; Mongo/Elasticsearch are documented
-#    stubs — see bitscrape.storage.backends for the exact status of each) ──
-from bitscrape.storage.backends import (
-    BaseStorageBackend,
-    PostgresStorageBackend,
-    S3StorageBackend,
-    SQLiteStorageBackend,
 )
 
 # ── Parser / selectors ─────────────────────────────────────────────────────
@@ -169,8 +189,62 @@ from bitscrape.pipeline.pipelines import (
     ValidationPipeline,
 )
 
+# ── Plugin system ──────────────────────────────────────────────────────────
+from bitscrape.plugins import (
+    BasePlugin,
+    BearerTokenAuthPlugin,
+    PluginManager,
+    StorageConnectorPlugin,
+)
+
+# ── RAG pipeline (markdown + chunking + hybrid search, tied together) ────
+from bitscrape.rag import RagPipeline, RagResult
+
+# ── Semantic ranking (BM25 + vectors + fusion) ─────────────────────────────
+from bitscrape.ranking import (
+    BM25Index,
+    HybridSearcher,
+    HybridSearchResult,
+    VectorIndex,
+    reciprocal_rank_fusion,
+)
+
+# ── Incremental recrawling ─────────────────────────────────────────────────
+from bitscrape.recrawl import PageHistory, RecrawlScheduler
+
 # ── Scheduler ──────────────────────────────────────────────────────────────
 from bitscrape.scheduler.scheduler import MemoryQueue, RedisQueue, Scheduler
+
+# ── Multi-session support (named HTTP / browser sessions, routed by id) ───
+from bitscrape.sessions import (
+    BaseSession,
+    BrowserSession,
+    HttpSession,
+    SessionError,
+    SessionManager,
+)
+
+# ── Spider templates (sitemap / XML feed / CSV feed / Shopify) ────────────
+from bitscrape.spiders import (
+    ContentSpider,
+    CSVFeedSpider,
+    ShopifySpider,
+    SitemapSpider,
+    SiteToMarkdownSpider,
+    XMLFeedSpider,
+)
+from bitscrape.network import NetworkRecorder, RecordedResponse
+from bitscrape.dns import DoHResolver
+
+# ── Storage backends (SQLite/S3 fully supported; Postgres implemented but
+#    unverified against a live server; Mongo/Elasticsearch are documented
+#    stubs — see bitscrape.storage.backends for the exact status of each) ──
+from bitscrape.storage.backends import (
+    BaseStorageBackend,
+    PostgresStorageBackend,
+    S3StorageBackend,
+    SQLiteStorageBackend,
+)
 
 # ── Convenient aliases ─────────────────────────────────────────────────────
 
@@ -321,7 +395,7 @@ def run(
     async def _build_and_run() -> CrawlStats:
         engine = await build_engine(
             spider,
-            cfg,
+            spider.settings,  # includes the spider's ``custom_settings``
             exporter=exporter,
         )
         if middlewares is not None:
@@ -331,6 +405,58 @@ def run(
         return await engine.run()
 
     return asyncio.run(_build_and_run())
+
+
+def fetch_url(
+    url: str,
+    *,
+    use_playwright: bool = False,
+    settings: Settings | None = None,
+) -> Response:
+    """
+    Fetch a single URL and return the ``Response`` -- synchronously, no
+    ``async``/``await`` needed. The single-request equivalent of
+    ``bitscrape.run()`` (which runs a whole spider); both are plain
+    blocking functions that internally do the async work via
+    ``asyncio.run()``, for scripts/notebooks/REPLs that aren't already
+    inside an event loop.
+
+    Usage::
+
+        import bitscrape
+        response = bitscrape.fetch_url("https://example.com")
+        print(response.status, len(response.body))
+
+    Raises ``RuntimeError`` if called from inside a running event loop
+    (e.g. from within an ``async def`` spider callback) -- use
+    ``await Downloader(settings).fetch(Request(url=url))`` directly there
+    instead, since ``asyncio.run()`` cannot nest inside a running loop.
+    """
+    from bitscrape.downloader.downloader import Downloader
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass  # no running loop -- the normal case, safe to asyncio.run()
+    else:
+        raise RuntimeError(
+            "bitscrape.fetch_url() is a synchronous helper and can't be "
+            "called from inside a running event loop (e.g. an async spider "
+            "callback). Use `await Downloader(settings).fetch(Request(url=url))` "
+            "directly there instead."
+        )
+
+    cfg = settings or Settings()
+
+    async def _fetch() -> Response:
+        downloader = Downloader(cfg)
+        await downloader.open()
+        try:
+            return await downloader.fetch(Request(url=url, use_playwright=use_playwright))
+        finally:
+            await downloader.close()
+
+    return asyncio.run(_fetch())
 
 
 # ── Version ────────────────────────────────────────────────────────────────
@@ -364,6 +490,7 @@ __all__ = [
     # Engine, runner & factory
     "Engine",
     "run",
+    "fetch_url",
     "build_engine",
     "build_middlewares",
     # Parser
@@ -384,12 +511,43 @@ __all__ = [
     "JSONExporter",
     "CSVExporter",
     "XMLExporter",
+    "YAMLExporter",
+    "TOMLExporter",
+    "INIExporter",
+    "MarkdownExporter",
+    "MessagePackExporter",
+    "BSONExporter",
+    "ProtobufExporter",
+    "ParquetExporter",
+    "ORCExporter",
+    "AvroExporter",
+    "WARCExporter",
+    "PDFExporter",
+    "DocxExporter",
+    "response_to_item",
     "get_exporter",
+    "ItemList",
+    # Direct HTTP requests
+    "Fetcher",
+    "AsyncFetcher",
+    "FetcherSession",
+    "AsyncFetcherSession",
+    "FetchError",
+    # Browser fetching of JavaScript-driven pages
+    "DynamicFetcher",
+    "AsyncDynamicFetcher",
+    "DynamicSession",
+    "AsyncDynamicSession",
+    "DynamicFetchError",
+    "BrowserLaunchError",
     # Middleware
     "BaseMiddleware",
     "UserAgentMiddleware",
+    "OffsiteDrop",
+    "OffsiteMiddleware",
     "RobotsMiddleware",
     "MetaRobotsMiddleware",
+    "RobotsCache",
     "CookieMiddleware",
     "SessionPoolMiddleware",
     "ProxyMiddleware",
@@ -399,6 +557,36 @@ __all__ = [
     "Scheduler",
     "MemoryQueue",
     "RedisQueue",
+    # Crawl rules / link extraction
+    "CrawlSpider",
+    "Rule",
+    "LinkExtractor",
+    # Spider templates
+    "SitemapSpider",
+    "XMLFeedSpider",
+    "CSVFeedSpider",
+    "ShopifySpider",
+    # Proxy rotation / dev-mode cache / blocked-request detection / domain blocking
+    "ProxyRotator",
+    "DevModeCache",
+    "BlockedRequestDetector",
+    "DomainBlocker",
+    "ContentSpider",
+    "SiteToMarkdownSpider",
+    "NetworkRecorder",
+    "RecordedResponse",
+    "DoHResolver",
+    # Politeness
+    "AutoThrottle",
+    # Multi-session
+    "SessionManager",
+    "HttpSession",
+    "BrowserSession",
+    "BaseSession",
+    "SessionError",
+    # RAG pipeline
+    "RagPipeline",
+    "RagResult",
     # URL Frontier
     "Frontier",
     # Link analysis

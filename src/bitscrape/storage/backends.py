@@ -43,9 +43,10 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Self
+from typing import Any
 
 from pydantic import BaseModel
+from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 

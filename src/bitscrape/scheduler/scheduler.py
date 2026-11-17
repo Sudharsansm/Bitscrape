@@ -32,6 +32,35 @@ from bitscrape.scheduler.dupefilter import (
 logger = logging.getLogger(__name__)
 
 
+def request_to_bytes(request: Request) -> bytes:
+    """Serialise a Request to JSON bytes. ``bytes`` bodies (POST/PUT) are
+    base64-encoded under ``body_b64`` -- ``orjson`` cannot encode raw bytes,
+    which previously made every non-empty-body request crash the Redis queue."""
+    import base64
+
+    import orjson
+
+    data = request.model_dump()
+    body = data.pop("body", None)
+    if body is not None:
+        data["body_b64"] = base64.b64encode(body).decode("ascii")
+    return orjson.dumps(data)
+
+
+def request_from_bytes(payload: bytes | str) -> Request:
+    """Inverse of :func:`request_to_bytes` (also reads payloads written by
+    0.8.x, which have no ``body_b64`` key)."""
+    import base64
+
+    import orjson
+
+    data = orjson.loads(payload)
+    body_b64 = data.pop("body_b64", None)
+    if body_b64 is not None:
+        data["body"] = base64.b64decode(body_b64)
+    return Request(**data)
+
+
 # ---------------------------------------------------------------------------
 # Queue abstraction
 # ---------------------------------------------------------------------------
@@ -93,6 +122,23 @@ class MemoryQueue(BaseQueue):
     async def close(self) -> None:
         pass
 
+    def peek(self) -> list[Request]:
+        """Return every queued request in priority order *without* removing
+        them (periodic, crash-safe checkpoints while the crawl runs)."""
+        heap = getattr(self._q, "_queue", [])
+        return [item[2] for item in sorted(heap, key=lambda t: (t[0], t[1]))]
+
+    def drain(self) -> list[Request]:
+        """Remove and return every queued request in priority order (used to
+        checkpoint a paused crawl)."""
+        out: list[Request] = []
+        while True:
+            try:
+                _, _, req = self._q.get_nowait()
+            except asyncio.QueueEmpty:
+                return out
+            out.append(req)
+
     @property
     def size(self) -> int:
         return self._q.qsize()
@@ -112,21 +158,16 @@ class RedisQueue(BaseQueue):
         self._size_cache = 0
 
     async def push(self, request: Request) -> None:
-        import orjson
-
-        payload = orjson.dumps(request.model_dump())
+        payload = request_to_bytes(request)
         await self._redis.zadd(self._key, {payload: request.priority.value})
 
     async def pop(self) -> Request | None:
-        import orjson
-
         raw = await self._redis.zpopmin(self._key, 1)
         items = cast("list[tuple[bytes, float]]", raw)
         if not items:
             return None
         payload, _ = items[0]
-        data = orjson.loads(payload)
-        return Request(**data)
+        return request_from_bytes(payload)
 
     async def close(self) -> None:
         pass  # keep queue for resume
@@ -189,7 +230,11 @@ class Scheduler:
 
         # Fingerprint
         fp = fingerprint(request)
-        if self.settings.dupefilter_enabled and await self._dupefilter.seen(fp):
+        if (
+            self.settings.dupefilter_enabled
+            and not request.dont_filter
+            and await self._dupefilter.seen(fp)
+        ):
             self._duped += 1
             logger.debug("Duplicate filtered: %s", request.url)
             return False
@@ -202,6 +247,40 @@ class Scheduler:
 
     async def next_request(self) -> Request | None:
         return await self._queue.pop()
+
+    # ------------------------------------------------------------------
+    # Checkpoint support (pause / resume)
+    # ------------------------------------------------------------------
+
+    @property
+    def is_persistent(self) -> bool:
+        """True when the queue lives outside this process (Redis), in which
+        case pause/resume needs no local checkpoint of the queue."""
+        return not isinstance(self._queue, MemoryQueue)
+
+    def snapshot(self, drain: bool = True) -> tuple[list[Request], list[str]]:
+        """Return ``(pending_requests, seen_fingerprints)`` for an in-memory
+        scheduler. ``drain=True`` empties the queue (final pause); ``False``
+        leaves it intact (periodic checkpoint). Only meaningful for the
+        in-memory backends -- Redis already persists its own queue/dupefilter."""
+        if isinstance(self._queue, MemoryQueue):
+            pending = self._queue.drain() if drain else self._queue.peek()
+        else:
+            pending = []
+        seen = (
+            list(self._dupefilter._seen) if isinstance(self._dupefilter, MemoryDupeFilter) else []
+        )
+        return pending, seen
+
+    async def restore(self, pending: list[Request], seen: list[str]) -> None:
+        """Reload a checkpoint: mark ``seen`` fingerprints as visited and
+        re-queue ``pending`` requests (bypassing the dupefilter, since their
+        fingerprints are in ``seen`` already)."""
+        if isinstance(self._dupefilter, MemoryDupeFilter):
+            self._dupefilter._seen.update(seen)
+        for req in pending:
+            await self._queue.push(req)
+            self._enqueued += 1
 
     async def close(self) -> None:
         await self._queue.close()

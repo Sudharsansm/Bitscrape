@@ -55,13 +55,34 @@ server only had to send headers, not the full page again.
 `RobotsMiddleware` (included whenever `Settings.robotstxt_obey=True`, the
 default) fetches and caches `/robots.txt` per domain and:
 
-- Blocks disallowed paths via the standard library's `RobotFileParser`.
-- Surfaces `Crawl-delay` into `request.meta["crawl_delay"]` and discovered
-  `Sitemap:` URLs into `request.meta["sitemaps"]`.
+- Blocks disallowed paths using [Protego](https://github.com/scrapy/protego)
+  (`*`/`$` wildcards, most-specific-`User-agent`-group precedence — richer
+  than the standard library's `RobotFileParser`, which this middleware used
+  before this rewrite).
+- Surfaces `Crawl-delay` **and `Request-rate`** (its optional time-of-day
+  window is checked on every request, not just when robots.txt was fetched)
+  into `request.meta["crawl_delay"]`, and discovered `Sitemap:` URLs into
+  `request.meta["sitemaps"]`.
 - **Fails safe, not open**: a 4xx (including 404) means "no robots.txt
   published" → unrestricted access (standard convention). Any other
   failure (timeout, DNS error, 5xx) blocks requests to that domain until a
-  fetch succeeds — the real rules are unknown, not confirmed absent.
+  fetch succeeds — the real rules are unknown, not confirmed absent. A
+  domain whose fetch failed is retried after `robots_negative_cache_ttl`
+  seconds, not on every single request to it.
+
+See [robots.md](../robots.md) for the full settings list, caching/TTL
+behaviour, and `SitemapSpider`'s robots.txt-driven discovery.
+
+## Staying on-site: `allowed_domains`
+
+Setting `Spider.allowed_domains = ["example.com"]` (a bare host also allows
+its subdomains) makes `OffsiteMiddleware` — always installed, a no-op while
+this list is empty — drop any request to a different host before it's
+fetched. Counted as `stats.requests_dropped` / `requests_offsite_dropped`,
+not `requests_failed` (it's policy, not an error). `CrawlSpider` and
+`SitemapSpider` rules can additionally use `LinkExtractor(allow_domains=...)`
+to avoid even creating the request; `allowed_domains` is the backstop that
+applies regardless of how a request was built.
 
 ## Meta-robots (`noindex` / `nofollow`)
 

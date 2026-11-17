@@ -4,17 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bitscrape"
-version = "0.8.0"
-description = "A modern, production-grade async web scraping framework (patched fork: robots.txt, queue-crash, proxy, and infinite-scroll fixes)"
+version = "0.8.1"
+description = "A modern, production-grade async web scraping framework: spiders, browser sessions, network capture, ad blocking, DoH, MCP server, RAG-ready Markdown"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Bitscrape Contributors" }]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 keywords = ["scraping", "crawler", "async", "pydantic", "playwright", "spider"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Internet :: WWW/HTTP",
@@ -25,9 +26,11 @@ classifiers = [
 
 dependencies = [
     "aiohttp>=3.9",
+    "protego>=0.3",
     "pydantic>=2.6",
     "pydantic-settings>=2.2",
-    "selectolax>=0.3",
+    "selectolax>=0.3,<1",  # 1.x dropped the Modest backend bitscrape.parser imports
+    "orjson>=3.9",  # fast JSON (bitscrape.jsonx)
     "parsel>=1.9",
     "lxml>=5.0",
     "click>=8.1",
@@ -36,7 +39,8 @@ dependencies = [
 [project.optional-dependencies]
 playwright = ["playwright>=1.40"]
 redis = ["redis>=5.0", "orjson>=3.9"]
-cli = ["rich>=13.0"]
+cli = ["rich>=13.0", "ipython>=8.20"]
+mcp = ["mcp>=1.9,<2", "uvicorn>=0.30"]
 storage-sqlite = ["aiosqlite>=0.19"]
 storage-postgres = ["asyncpg>=0.29"]
 storage-s3 = ["boto3>=1.34"]
@@ -49,6 +53,35 @@ observability = [
     "opentelemetry-api>=1.24",
     "opentelemetry-sdk>=1.24",
 ]
+# Real HTTP/2 for bitscrape.Fetcher / FetcherSession(protocol="http2"), via httpx.
+http2 = ["httpx[http2]>=0.27"]
+# --- Export formats (bitscrape.exporters) -----------------------------------
+# JSON/JSONL/CSV/XML need nothing extra. Each format below is its own extra,
+# so installing one doesn't pull in the rest; `export-formats` installs all
+# of them at once, and they're all in `all` too.
+parquet = ["pyarrow>=14.0"]
+orc = ["pyarrow>=14.0"]  # ORC support ships in the official pyarrow wheels
+avro = ["fastavro>=1.9"]
+yaml = ["pyyaml>=6.0"]
+toml = ["tomli-w>=1.0"]  # writing only; reading is the stdlib's tomllib (3.11+)
+protobuf = ["protobuf>=4.25"]
+msgpack = ["msgpack>=1.0"]
+bson = ["pymongo>=4.6"]  # for its bundled bson module -- see BSONExporter's docstring
+warc = ["warcio>=1.7"]
+pdf = ["fpdf2>=2.7"]
+docx = ["python-docx>=1.1"]
+export-formats = [
+    "pyarrow>=14.0",
+    "fastavro>=1.9",
+    "pyyaml>=6.0",
+    "tomli-w>=1.0",
+    "protobuf>=4.25",
+    "msgpack>=1.0",
+    "pymongo>=4.6",
+    "warcio>=1.7",
+    "fpdf2>=2.7",
+    "python-docx>=1.1",
+]
 dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
@@ -58,12 +91,18 @@ dev = [
     "moto[s3]==5.2.2",
     "pyyaml==6.0.3",
     "mongomock-motor>=0.0.29",
+    # local TLS + ALPN test server for the HTTP/2 tests in tests/test_fetchers.py
+    "hypercorn>=0.16",
+    "trustme>=1.1",
 ]
 all = [
     "playwright>=1.40",
     "redis>=5.0",
     "orjson>=3.9",
     "rich>=13.0",
+    "ipython>=8.20",
+    "mcp>=1.9,<2",
+    "uvicorn>=0.30",
     "aiosqlite>=0.19",
     "asyncpg>=0.29",
     "boto3>=1.34",
@@ -76,6 +115,17 @@ all = [
     "prometheus-client>=0.20",
     "opentelemetry-api>=1.24",
     "opentelemetry-sdk>=1.24",
+    "pyarrow>=14.0",
+    "fastavro>=1.9",
+    "pyyaml>=6.0",
+    "tomli-w>=1.0",
+    "protobuf>=4.25",
+    "msgpack>=1.0",
+    "pymongo>=4.6",
+    "warcio>=1.7",
+    "fpdf2>=2.7",
+    "python-docx>=1.1",
+    "httpx[http2]>=0.27",
 ]
 
 [project.scripts]
@@ -91,7 +141,7 @@ Changelog = "https://github.com/Sudharsansm/Bitscrape/blob/main/CHANGELOG.md"
 where = ["src"]
 
 [tool.setuptools.package-data]
-bitscrape = ["py.typed"]
+bitscrape = ["py.typed", "data/*.txt"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -99,13 +149,36 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.mypy]
-python_version = "3.12"
+# Needed so the per-module follow_imports="skip" overrides below also apply to .pyi stubs.
+follow_imports_for_stubs = true
+python_version = "3.10"
 warn_unused_ignores = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["networkx.*", "asyncpg.*", "boto3.*", "psutil.*", "parsel.*", "langgraph.*", "numpy.*", "scipy.*", "motor.*", "mongomock_motor.*"]
+module = [
+    "networkx.*", "asyncpg.*", "boto3.*", "psutil.*", "parsel.*", "langgraph.*",
+    "scipy.*", "motor.*", "mongomock_motor.*",
+    # optional third-party packages without (usable) type information
+    "lxml.*", "curl_cffi.*", "scrapy.*", "twisted.*", "IPython.*", "traitlets.*",
+    "pyarrow.*", "openpyxl.*", "yaml.*", "msgpack.*", "zstandard.*", "aioquic.*",
+    "patchright.*", "cssselect.*", "mcp.*",
+    # new export-format dependencies (bitscrape[parquet,orc,avro,toml,protobuf,
+    # msgpack,bson,warc,pdf,docx]) without (usable) type information
+    "fastavro.*", "tomli_w.*", "google.protobuf.*", "bson.*", "warcio.*",
+    "fpdf.*", "docx.*",
+]
 ignore_missing_imports = true
+
+# numpy's newest stubs (pulled in transitively via scipy/networkx) use 3.12-only
+# syntax that mypy rejects under our 3.10 target, so don't analyse them.
+[[tool.mypy.overrides]]
+module = [
+    "numpy", "numpy.*", "scipy", "scipy.*", "networkx", "networkx.*",
+    "langgraph", "langgraph.*", "pymongo", "pymongo.*", "gridfs", "gridfs.*", "motor", "motor.*",
+]
+ignore_missing_imports = true
+follow_imports = "skip"

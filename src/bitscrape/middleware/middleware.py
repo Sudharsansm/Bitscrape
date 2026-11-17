@@ -22,6 +22,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from bitscrape.core.models import Request, Response
+from bitscrape.middleware.robots import RobotsCache, RobotsInfo
 
 logger = logging.getLogger(__name__)
 
@@ -135,133 +136,135 @@ class ProxyMiddleware(BaseMiddleware):
 
 
 # ---------------------------------------------------------------------------
+# Offsite filtering
+# ---------------------------------------------------------------------------
+
+
+class OffsiteDrop(Exception):
+    """Raised by :class:`OffsiteMiddleware` for a request outside
+    ``spider.allowed_domains``. The Engine catches this alongside
+    :class:`~bitscrape.pipeline.pipelines.DropItem` -- both mean "silently
+    decline this request, no traceback, don't touch requests_failed" -- and
+    additionally recognises this specific type to bump
+    ``CrawlStats.requests_offsite_dropped``.
+    """
+
+
+def _host_allowed(host: str, allowed_domains: list[str]) -> bool:
+    host = host.lower().rstrip(".")
+    return any(
+        host == d or host.endswith("." + d)
+        for d in (x.lower().lstrip(".") for x in allowed_domains)
+    )
+
+
+class OffsiteMiddleware(BaseMiddleware):
+    """
+    Drops any request whose host isn't in ``spider.allowed_domains`` (exact
+    host or a subdomain of it) -- matching what that attribute's docstring has
+    always promised. A no-op while ``allowed_domains`` is empty (the default:
+    crawl anywhere), so it's always installed; there's nothing to configure.
+
+    Runs first in the middleware chain: an offsite URL is rejected before
+    robots.txt is ever fetched for it, sessions are touched, or anything else
+    does work on a request that was never going anywhere.
+
+    Counted as ``CrawlStats.requests_dropped`` /
+    ``requests_offsite_dropped`` -- not ``requests_failed`` -- since this is
+    policy, not an error. ``CrawlSpider``/``SitemapSpider`` rules can filter
+    the same way with ``LinkExtractor(allow_domains=...)`` to avoid creating
+    (and then dropping) the request at all; this middleware is what makes
+    ``allowed_domains`` itself actually mean something, for hand-written
+    spiders too.
+    """
+
+    async def process_request(self, request: Request, spider: Any) -> None:
+        allowed = getattr(spider, "allowed_domains", None)
+        if not allowed:
+            return
+        host = urlparse(request.url).hostname or ""
+        if _host_allowed(host, allowed):
+            return
+        logger.debug("Offsite request dropped: %s (allowed_domains=%s)", request.url, allowed)
+        raise OffsiteDrop(f"{request.url} is not within allowed_domains={list(allowed)}")
+
+
+# ---------------------------------------------------------------------------
 # Robots.txt
 # ---------------------------------------------------------------------------
 
 
-class RobotsInfo:
-    """Parsed robots.txt data for one domain: the parser plus its directives."""
-
-    __slots__ = ("crawl_delay", "parser", "sitemaps")
-
-    def __init__(
-        self,
-        parser: Any,
-        crawl_delay: float | None,
-        sitemaps: list[str],
-    ) -> None:
-        self.parser = parser
-        self.crawl_delay = crawl_delay
-        self.sitemaps = sitemaps
-
-
 class RobotsMiddleware(BaseMiddleware):
     """
-    Downloads and caches robots.txt for each domain, blocks disallowed paths,
-    and exposes ``Crawl-delay`` / ``Sitemap`` directives.
+    Blocks disallowed requests and surfaces ``Crawl-delay`` / ``Request-rate`` /
+    ``Sitemap`` directives, per :data:`bitscrape.core.settings.Settings.robotstxt_obey`.
 
-    ROOT-CAUSE FIX: the previous implementation called ``parser.feed(text)``,
-    but ``urllib.robotparser.RobotFileParser`` has no ``feed()`` method (only
-    ``.parse(lines)``). Every single robots.txt fetch therefore raised
-    ``AttributeError``, which the surrounding ``except Exception`` silently
-    swallowed by setting the cached parser to ``None`` — meaning
-    ``robotstxt_obey`` was **always a no-op in practice**, regardless of its
-    setting, because ``info.parser`` was always ``None`` and
-    ``can_fetch()`` was never actually called. This was a correctness bug,
-    not just a missing-feature gap.
+    The parsing, caching, concurrency-safety and fail-safe policy live in
+    :mod:`bitscrape.middleware.robots` (:class:`~bitscrape.middleware.robots.RobotsCache`);
+    this class is the ``process_request`` adapter plus the historical
+    ``mw._cache[domain]`` shape a couple of older call sites still poke at
+    directly (a plain ``RobotsInfo``-like object with ``.parser`` /
+    ``.crawl_delay`` / ``.sitemaps``).
 
-    Once ``.parse()`` is used correctly, ``RobotFileParser`` already exposes
-    ``Crawl-delay`` via ``.crawl_delay(useragent)`` and ``Sitemap`` entries
-    via ``.site_maps()`` natively — no manual re-parsing of the raw text is
-    needed for those either.
-
-    Fail-safe behaviour: if robots.txt cannot be fetched (network error,
-    timeout, non-200 status), we no longer treat that as "no restrictions".
-    A 4xx (including 404) is treated as "robots.txt does not exist" — full
-    access is allowed, matching the standard convention. Any other failure
-    (timeout, connection error, 5xx) is fail-safe: requests to that domain
-    are blocked until a successful fetch, since a server error means the
-    real rules are unknown, not that there are none.
+    Effective per-domain delay is put in ``request.meta["crawl_delay"]`` as
+    before -- now it's ``max(Crawl-delay, Request-rate's implied spacing)``,
+    the latter only while its optional time-of-day window applies. The full
+    ``Request-rate`` directive (if any) is additionally put in
+    ``request.meta["request_rate"]`` as a plain dict, for spiders that want to
+    reason about the window themselves. See ``docs/robots.md``.
     """
 
-    def __init__(self) -> None:
-        self._cache: dict[str, RobotsInfo | None] = {}
+    def __init__(self, cache: RobotsCache | None = None) -> None:
+        self._robots = cache or RobotsCache()
 
-    async def _get_info(self, domain: str, scheme: str, user_agent: str) -> RobotsInfo | None:
-        if domain in self._cache:
-            return self._cache[domain]
-        try:
-            from urllib.robotparser import RobotFileParser
+    @property
+    def _cache(self) -> dict[str, RobotsInfo]:
+        # Kept for introspection/tests written against the pre-upgrade shape;
+        # RobotsCache._cache is the real, TTL'd, size-bounded store.
+        return dict(self._robots._cache)
 
-            import aiohttp
-
-            url = f"{scheme}://{domain}/robots.txt"
-            async with (
-                aiohttp.ClientSession() as sess,
-                sess.get(url, timeout=aiohttp.ClientTimeout(total=5)) as resp,
-            ):
-                if 400 <= resp.status < 500:
-                    # No robots.txt published -> unrestricted access, and we
-                    # can safely cache "no rules" rather than fail-safe.
-                    self._cache[domain] = RobotsInfo(parser=None, crawl_delay=None, sitemaps=[])
-                    return self._cache[domain]
-                resp.raise_for_status()
-                text = await resp.text()
-
-            parser = RobotFileParser()
-            parser.set_url(url)
-            parser.parse(text.splitlines())  # NOT .feed() -- see class docstring
-
-            ua_token = user_agent.split("/")[0].strip() or "*"
-            raw_delay = parser.crawl_delay(ua_token)
-            if raw_delay is None and ua_token != "*":
-                raw_delay = parser.crawl_delay("*")
-            crawl_delay = float(raw_delay) if raw_delay is not None else None
-            sitemaps = list(parser.site_maps() or [])
-
-            info = RobotsInfo(parser=parser, crawl_delay=crawl_delay, sitemaps=sitemaps)
-            self._cache[domain] = info
-            return info
-        except Exception as exc:  # noqa: BLE001 -- intentional: any failure must fail safe
-            logger.warning(
-                "robots.txt fetch failed for %s (%s) — failing safe, blocking until a "
-                "successful fetch",
-                domain,
-                exc,
-            )
-            # Deliberately NOT cached: retry on the next request instead of
-            # permanently locking the domain out over one transient error.
-            return None
+    def stats(self) -> dict[str, Any]:
+        return self._robots.stats()
 
     async def process_request(self, request: Request, spider: Any) -> None:
-        if not spider.settings.robotstxt_obey:
+        settings = spider.settings
+        if not getattr(settings, "robotstxt_obey", False):
             return
         parsed = urlparse(request.url)
-        domain = parsed.netloc
-        scheme = parsed.scheme
-        ua = spider.settings.user_agent
+        domain, scheme = parsed.netloc, parsed.scheme
+        ua = getattr(settings, "robots_user_agent", None) or settings.user_agent
 
-        info = await self._get_info(domain, scheme, ua)
-        if info is None:
-            # Fetch failed and nothing cached yet: fail safe rather than
-            # silently allowing everything through.
-            from bitscrape.pipeline.pipelines import DropItem
-
-            raise DropItem(
-                f"robots.txt unavailable for {domain}; blocking until it can be verified"
-            )
+        info = await self._robots.get(domain, scheme, ua)
 
         if info.sitemaps:
             request.meta.setdefault("sitemaps", info.sitemaps)
-        if info.crawl_delay is not None:
-            request.meta.setdefault("crawl_delay", info.crawl_delay)
+        delay = info.effective_delay()
+        if delay is not None:
+            request.meta.setdefault("crawl_delay", delay)
+        rr = info.request_rate
+        if rr is not None and getattr(settings, "robots_respect_request_rate", True):
+            request.meta.setdefault(
+                "request_rate",
+                {
+                    "requests": rr.requests,
+                    "seconds": rr.seconds,
+                    "delay": rr.delay,
+                    "start_time": rr.start_time.isoformat() if rr.start_time else None,
+                    "end_time": rr.end_time.isoformat() if rr.end_time else None,
+                    "in_window": rr.in_window(),
+                },
+            )
 
-        if info.parser and not info.parser.can_fetch(ua, request.url):
+        if not info.can_fetch(request.url, ua):
             logger.info("Blocked by robots.txt: %s", request.url)
             from bitscrape.pipeline.pipelines import DropItem
 
-            raise DropItem(f"robots.txt disallows: {request.url}")
-        return
+            reason = (
+                f"robots.txt unavailable for {domain}; blocking until it can be verified"
+                if not info.ok
+                else f"robots.txt disallows: {request.url}"
+            )
+            raise DropItem(reason)
 
 
 # ---------------------------------------------------------------------------

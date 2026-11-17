@@ -135,11 +135,23 @@ class Downloader:
     async def close(self) -> None
     async def fetch(self, request: Request) -> Response
 
+# bitscrape.downloader.throttle
 class AutoThrottle:
-    def __init__(self, start_delay=1.0, max_delay=60.0, target_concurrency=2.0) -> None
-    def get_delay(self, domain: str) -> float
-    def update(self, domain: str, latency_seconds: float) -> None
+    def __init__(self, start_delay=1.0, max_delay=60.0, target_concurrency=2.0, *,
+                 block_backoff=True, backoff_factor=2.0, recovery=0.5, max_cooldown=120.0) -> None
+    def get_delay(self, domain: str) -> float                      # learned delay
+    def delay_for(self, domain: str, floor: float = 0.0) -> float  # max(learned, floor)
+    def record(self, domain, latency, *, ok=True, retry_after=None, floor=0.0) -> ThrottleDecision
+    def update(self, domain: str, latency_seconds: float) -> None  # = record(..., ok=True)
+    def snapshot(self) -> dict[str, dict]
     def reset(self, domain: str | None = None) -> None
+
+class DomainPacer:            # enforces the delay: FIFO per-domain start-time spacing + cool-downs
+    async def wait(self, domain: str, delay: float | Callable[[], float]) -> float
+    def pause(self, domain: str, seconds: float) -> None
+    def paused_for(self, domain: str) -> float
+
+def parse_retry_after(value: str | None) -> float | None
 
 class BrowserPool:
     def __init__(self, playwright_browser: str, headless: bool, pool_size: int) -> None

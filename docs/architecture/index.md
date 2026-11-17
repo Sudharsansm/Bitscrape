@@ -268,9 +268,11 @@ priority tiers + one per-domain back-queue with its own next-allowed-time)
 - **`aiohttp`** (default): connection-pooled, with per-domain semaphores
   (`concurrent_requests_per_domain`), conditional GET
   (`If-None-Match`/`If-Modified-Since`, serving cached bodies on `304`),
-  Retry-After-aware backoff, and (if `autothrottle_enabled`) an
-  `AutoThrottle` instance adjusting the effective per-domain delay from
-  observed response latency.
+  Retry-After-aware backoff, a per-domain `DomainPacer` (start-time
+  spacing that is safe under concurrency), and (if `autothrottle_enabled`)
+  an `AutoThrottle` that learns each domain's delay from response latency,
+  doubles it on blocks, pauses the domain for `Retry-After`, and recovers
+  when the site does (see [autothrottle](../autothrottle.md)).
 - **Playwright** (`request.use_playwright=True` or
   `use_playwright=True` passed to `self.follow()`): launches a real
   browser. If `playwright_pool_enabled=True`, a `BrowserPool` reuses
